@@ -1,0 +1,16 @@
+{
+  "name": "xaostech-account",
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "hono": "latest"
+  },
+  "devDependencies": {
+    "wrangler": "latest",
+    "typescript": "latest"
+  }
+}

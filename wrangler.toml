@@ -1,0 +1,31 @@
+name = "xaostech-account"
+compatibility_date = "2025-12-31"
+main = "src/index.ts"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "account-db"
+
+[[kv_namespaces]]
+binding = "SESSIONS_KV"
+
+[vars]
+OAUTH_PROVIDER = "github"
+COOKIE_DOMAIN = ".xaostech.io"
+COOKIE_SECURE = "true"
+COOKIE_HTTP_ONLY = "true"
+COOKIE_SAME_SITE = "Lax"
+SESSION_TTL = "604800"
+
+[env.production]
+routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
+# legacy: auth.xaostech.io replaced by account.xaostech.io
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "account-db"
+database_id = ""
+
+[[env.production.kv_namespaces]]
+binding = "SESSIONS_KV"
+id = ""
