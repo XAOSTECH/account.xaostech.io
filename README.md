@@ -70,21 +70,31 @@
 
 ## 🔍 Overview
 
-account worker
+User account management with **zero-trust authentication**:
+- OAuth flow + session management
+- Password reset with email verification
+- Two-Factor Authentication (2FA) via TOTP
+- GDPR data export and account deletion
+- Audit logging for compliance
 
 ### Why account.xaostech.io?
 
-{{WHY_PROJECT}}
+Centralizes all **identity & authentication** logic. Integrates with:
+- `data.xaostech.io` - Consent and privacy data
+- `blog.xaostech.io` - User posts and comments
+- Other workers - User verification via session tokens
 
 ---
 
 ## ✨ Features
 
-- 🚀 **Feature 1** - Description of feature 1
-- 🔧 **Feature 2** - Description of feature 2
-- 📦 **Feature 3** - Description of feature 3
-- 🔒 **Feature 4** - Description of feature 4
-- ⚡ **Feature 5** - Description of feature 5
+- 🔐 **OAuth + Sessions** - Stateless JWT-like auth tokens
+- 🔑 **Password Reset** - Email-verified flow with 15-min tokens
+- 🔐 **2FA (TOTP)** - Time-based OTP with recovery codes
+- 📤 **Data Export** - GDPR Art. 15 (JSON export)
+- 🗑️ **Account Deletion** - GDPR Art. 17 (30-day grace)
+- 📋 **Audit Trail** - IP, timestamp, action logging
+- 🔒 **SameSite=Strict** - Secure session cookies
 
 ---
 
@@ -92,12 +102,26 @@ account worker
 
 ### Prerequisites
 
-- {{PREREQUISITE_1}}
-- {{PREREQUISITE_2}}
-- {{PREREQUISITE_3}}
+- Node.js 18+
+- Cloudflare account with Workers
+- D1 database
+- KV namespace (sessions, recovery codes, reset tokens)
 
 ### Quick Start
 
+```bash
+# Clone the repository
+git clone https://github.com/XAOSTECH/account.xaostech.io.git
+cd account.xaostech.io
+
+# Install dependencies
+npm install
+
+# Local development
+npm run dev
+
+# Deploy to production
+npm run deploy
 ```bash
 # Clone the repository
 git clone https://github.com/XAOSTECH/account.xaostech.io.git
