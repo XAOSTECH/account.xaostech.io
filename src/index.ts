@@ -39,6 +39,95 @@ const EmailSchema = z.object({
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+/**
+ * Verify Endpoint - Called by api.xaostech.io middleware
+ * 
+ * Used to validate tokens/sessions and return user auth context
+ * Supports two token types:
+ * - bearer: JWT or opaque token
+ * - session: Session ID from KV store
+ */
+app.post('/verify', async (c) => {
+  const { token, tokenType } = await c.req.json();
+
+  if (!token || !tokenType) {
+    return c.json({ 
+      error: 'Missing token or tokenType',
+      valid: false,
+    }, 400);
+  }
+
+  try {
+    let userData: any = null;
+
+    if (tokenType === 'session') {
+      // Verify session ID in KV
+      const sessionData = await c.env.SESSIONS_KV.get(token);
+      if (!sessionData) {
+        return c.json({ 
+          error: 'Invalid session',
+          valid: false,
+        }, 401);
+      }
+
+      userData = JSON.parse(sessionData);
+
+      // Check expiration
+      if (userData.expires && userData.expires < Date.now()) {
+        await c.env.SESSIONS_KV.delete(token);
+        return c.json({ 
+          error: 'Session expired',
+          valid: false,
+        }, 401);
+      }
+    } else if (tokenType === 'bearer') {
+      // Verify JWT or opaque bearer token
+      // For now, extract from DB - in production, use JWT verification
+      try {
+        const user = await c.env.DB.prepare(
+          'SELECT id, email, username, is_admin FROM users WHERE bearer_token = ? AND token_expires > datetime("now")'
+        ).bind(token).first();
+
+        if (!user) {
+          return c.json({ 
+            error: 'Invalid or expired token',
+            valid: false,
+          }, 401);
+        }
+
+        userData = user;
+      } catch (dbErr) {
+        return c.json({ 
+          error: 'Token verification failed',
+          valid: false,
+        }, 401);
+      }
+    } else {
+      return c.json({ 
+        error: 'Unknown tokenType',
+        valid: false,
+      }, 400);
+    }
+
+    // Return user auth context for middleware
+    return c.json({
+      valid: true,
+      userId: userData.id,
+      sessionId: token,
+      email: userData.email,
+      username: userData.username,
+      isAdmin: userData.is_admin || false,
+      scope: userData.scope ? JSON.parse(userData.scope) : [],
+    });
+  } catch (err) {
+    console.error('Verification error:', err);
+    return c.json({ 
+      error: 'Verification failed',
+      valid: false,
+    }, 500);
+  }
+});
+
 // ===== AUTHENTICATION =====
 
 app.post('/authorize', async (c) => {
