@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { webcrypto } from 'node:crypto';
+
+// For Node.js compatibility
+const crypto = globalThis.crypto || webcrypto;
 
 interface Env {
   DB: D1Database;
@@ -38,6 +42,169 @@ const EmailSchema = z.object({
 });
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// === DEBUG: ENV PRESENCE ===
+app.get('/debug/env', (c) => {
+  const cEnvHasClientId = !!(c.env && (c.env as any).CF_ACCESS_CLIENT_ID);
+  const cEnvHasClientSecret = !!(c.env && (c.env as any).CF_ACCESS_CLIENT_SECRET);
+  const processEnvHasClientId = !!(globalThis as any)?.process?.env?.CF_ACCESS_CLIENT_ID;
+  const processEnvHasClientSecret = !!(globalThis as any)?.process?.env?.CF_ACCESS_CLIENT_SECRET;
+  return c.json({ cEnvHasClientId, cEnvHasClientSecret, processEnvHasClientId, processEnvHasClientSecret });
+});
+
+// === DEBUG: DIRECT FETCH TEST ===
+app.get('/debug/fetch-direct', async (c) => {
+  try {
+    const clientId = (c.env as any)?.CF_ACCESS_CLIENT_ID;
+    const clientSecret = (c.env as any)?.CF_ACCESS_CLIENT_SECRET;
+
+    const headers: Record<string, string> = { 'User-Agent': 'XAOSTECH debug fetch' };
+    if (clientId && clientSecret) {
+      headers['CF-Access-Client-Id'] = clientId;
+      headers['CF-Access-Client-Secret'] = clientSecret;
+      headers['X-Proxy-CF-Injected'] = 'direct-test';
+    }
+
+    const resp = await fetch('https://api.xaostech.io/debug/headers', { method: 'GET', headers });
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const json = await resp.json();
+      return c.json({ proxiedDirect: json, status: resp.status });
+    }
+
+    const txt = await resp.text();
+    return c.json({ status: resp.status, contentType, bodyStartsWith: txt.slice(0, 200) });
+  } catch (err: any) {
+    console.error('[debug/fetch-direct] error:', err);
+    return c.json({ error: 'fetch direct failed', message: err.message }, 500);
+  }
+});
+
+/**
+ * Verify Endpoint - Called by api.xaostech.io middleware
+ * 
+ * Used to validate tokens/sessions and return user auth context
+ * Supports three token types:
+ * - bearer: JWT or opaque user token
+ * - session: Session ID from KV store
+ * - service: Service account token (bot/application)
+ */
+app.post('/verify', async (c) => {
+  const { token, tokenType } = await c.req.json();
+
+  if (!token || !tokenType) {
+    return c.json({ 
+      error: 'Missing token or tokenType',
+      valid: false,
+    }, 400);
+  }
+
+  try {
+    let userData: any = null;
+
+    if (tokenType === 'session') {
+      // Verify session ID in KV
+      const sessionData = await c.env.SESSIONS_KV.get(token);
+      if (!sessionData) {
+        return c.json({ 
+          error: 'Invalid session',
+          valid: false,
+        }, 401);
+      }
+
+      userData = JSON.parse(sessionData);
+
+      // Check expiration
+      if (userData.expires && userData.expires < Date.now()) {
+        await c.env.SESSIONS_KV.delete(token);
+        return c.json({ 
+          error: 'Session expired',
+          valid: false,
+        }, 401);
+      }
+    } else if (tokenType === 'bearer') {
+      // Verify JWT or opaque bearer token (user tokens)
+      try {
+        const user = await c.env.DB.prepare(
+          'SELECT id, email, username, is_admin FROM users WHERE bearer_token = ? AND token_expires > datetime("now")'
+        ).bind(token).first();
+
+        if (!user) {
+          return c.json({ 
+            error: 'Invalid or expired token',
+            valid: false,
+          }, 401);
+        }
+
+        userData = user;
+      } catch (dbErr) {
+        return c.json({ 
+          error: 'Token verification failed',
+          valid: false,
+        }, 401);
+      }
+    } else if (tokenType === 'service') {
+      // Verify service account token (bot/application)
+      try {
+        const tokenHash = await hashPassword(token);
+        const account = await c.env.DB.prepare(
+          'SELECT id, owner_id, name, scopes, active FROM service_accounts WHERE token_hash = ? AND active = 1'
+        ).bind(tokenHash).first();
+
+        if (!account) {
+          return c.json({ 
+            error: 'Invalid or disabled service token',
+            valid: false,
+          }, 401);
+        }
+
+        // Update last_used_at
+        await c.env.DB.prepare(
+          'UPDATE service_accounts SET last_used_at = datetime("now") WHERE id = ?'
+        ).bind(account.id).run();
+
+        userData = {
+          id: account.owner_id,
+          serviceAccountId: account.id,
+          serviceAccountName: account.name,
+          isServiceAccount: true,
+          scopes: JSON.parse(account.scopes),
+        };
+      } catch (dbErr) {
+        console.error('Service token verification error:', dbErr);
+        return c.json({ 
+          error: 'Service token verification failed',
+          valid: false,
+        }, 401);
+      }
+    } else {
+      return c.json({ 
+        error: 'Unknown tokenType',
+        valid: false,
+      }, 400);
+    }
+
+    // Return user auth context for middleware
+    return c.json({
+      valid: true,
+      userId: userData.id,
+      sessionId: token,
+      email: userData.email,
+      username: userData.username,
+      isAdmin: userData.is_admin || false,
+      isServiceAccount: userData.isServiceAccount || false,
+      serviceAccountId: userData.serviceAccountId,
+      serviceAccountName: userData.serviceAccountName,
+      scope: userData.scopes || (userData.scope ? JSON.parse(userData.scope) : []),
+    });
+  } catch (err) {
+    console.error('Verification error:', err);
+    return c.json({ 
+      error: 'Verification failed',
+      valid: false,
+    }, 500);
+  }
+});
 
 // ===== AUTHENTICATION =====
 
@@ -568,9 +735,190 @@ app.post('/gdpr/cancel-deletion/:deletion_id', async (c) => {
 // ===== HELPER FUNCTIONS =====
 
 async function hashPassword(password: string): Promise<string> {
-  // In real implementation, use bcrypt or argon2
-  // For now, just return a placeholder
-  return Buffer.from(password).toString('base64');
+  // Use SHA-256 for token hashing (one-way for service tokens)
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+// ===== SERVICE ACCOUNTS / BOT TOKENS =====
+/**
+ * Service accounts allow applications/bots to authenticate without user login
+ * Each service account has:
+ * - name: Display name
+ * - token: Opaque bearer token (hashed in DB)
+ * - scopes: Permissions (read_messages, write_messages, etc)
+ * - rate_limit: Requests per minute
+ * - owner_id: User that created it
+ * - active: Can be disabled
+ */
+
+app.post('/service-account/create', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const { name, scopes = ['read'], rate_limit = 60 } = await c.req.json();
+
+    if (!name || !Array.isArray(scopes)) {
+      return c.json({ error: 'name and scopes array required' }, 400);
+    }
+
+    // Generate a unique service token
+    const token = crypto.getRandomValues(new Uint8Array(32));
+    const tokenHex = Array.from(token).map(b => b.toString(16).padStart(2, '0')).join('');
+    const tokenHash = await hashPassword(tokenHex);
+
+    const accountId = crypto.randomUUID();
+    const now = Math.floor(Date.now() / 1000);
+
+    await c.env.DB.prepare(
+      `INSERT INTO service_accounts (id, owner_id, name, token_hash, scopes, rate_limit, active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`
+    ).bind(accountId, user.id, name, tokenHash, JSON.stringify(scopes), rate_limit, now).run();
+
+    // Audit log
+    await c.env.DB.prepare(
+      `INSERT INTO audit_logs (user_id, action, details, ip, timestamp)
+       VALUES (?, 'service_account_created', ?, ?, datetime('now'))`
+    ).bind(user.id, JSON.stringify({ account_id: accountId, name }), c.req.header('CF-Connecting-IP') || 'unknown').run();
+
+    // Return token only once (never again)
+    return c.json({
+      account_id: accountId,
+      name,
+      token: tokenHex,
+      scopes,
+      rate_limit,
+      message: 'Save this token securely. You will not see it again.',
+    }, 201);
+  } catch (err) {
+    console.error('Service account creation error:', err);
+    return c.json({ error: 'Failed to create service account' }, 500);
+  }
+});
+
+app.get('/service-account/list', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const accounts = await c.env.DB.prepare(
+      `SELECT id, name, scopes, rate_limit, active, created_at, last_used_at
+       FROM service_accounts
+       WHERE owner_id = ?
+       ORDER BY created_at DESC`
+    ).bind(user.id).all();
+
+    return c.json({
+      accounts: accounts.results?.map((acc: any) => ({
+        ...acc,
+        scopes: JSON.parse(acc.scopes)
+      })) || []
+    }, 200);
+  } catch (err) {
+    console.error('Service account list error:', err);
+    return c.json({ error: 'Failed to list service accounts' }, 500);
+  }
+});
+
+app.delete('/service-account/:account_id', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const accountId = c.req.param('account_id');
+
+    // Verify ownership
+    const account = await c.env.DB.prepare(
+      `SELECT owner_id FROM service_accounts WHERE id = ?`
+    ).bind(accountId).first();
+
+    if (!account || account.owner_id !== user.id) {
+      return c.json({ error: 'Not found or unauthorized' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `DELETE FROM service_accounts WHERE id = ?`
+    ).bind(accountId).run();
+
+    // Audit log
+    await c.env.DB.prepare(
+      `INSERT INTO audit_logs (user_id, action, details, ip, timestamp)
+       VALUES (?, 'service_account_deleted', ?, ?, datetime('now'))`
+    ).bind(user.id, JSON.stringify({ account_id: accountId }), c.req.header('CF-Connecting-IP') || 'unknown').run();
+
+    return c.json({ message: 'Service account deleted' }, 200);
+  } catch (err) {
+    console.error('Service account deletion error:', err);
+    return c.json({ error: 'Failed to delete service account' }, 500);
+  }
+});
+
+app.post('/service-account/:account_id/toggle', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const accountId = c.req.param('account_id');
+    const { active } = await c.req.json();
+
+    // Verify ownership
+    const account = await c.env.DB.prepare(
+      `SELECT owner_id FROM service_accounts WHERE id = ?`
+    ).bind(accountId).first();
+
+    if (!account || account.owner_id !== user.id) {
+      return c.json({ error: 'Not found or unauthorized' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE service_accounts SET active = ? WHERE id = ?`
+    ).bind(active ? 1 : 0, accountId).run();
+
+    return c.json({ message: `Service account ${active ? 'enabled' : 'disabled'}` }, 200);
+  } catch (err) {
+    console.error('Service account toggle error:', err);
+    return c.json({ error: 'Failed to update service account' }, 500);
+  }
+});
 
 export default app;

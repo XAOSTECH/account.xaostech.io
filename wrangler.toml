@@ -2,8 +2,11 @@ name = "xaostech-account"
 compatibility_date = "2025-12-31"
 main = "src/index.ts"
 send_metrics = false
+compatibility_flags = ["nodejs_compat"]
 
 [env.production]
+name = "xaostech-account"
+main = "src/index.ts"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
 
 [env.production.vars]
@@ -22,6 +25,10 @@ id = "${KV_SESSIONS_ID}"
 binding = "DB"
 database_name = "account-db"
 database_id = "${D1_ACCOUNT_DB_ID}"
+
+[[env.production.r2_buckets]]
+binding = "IMG"
+bucket_name = "img"
 
 [env.testing]
 routes = [{ pattern = "account.testing.local/*", zone_name = "localhost" }]
