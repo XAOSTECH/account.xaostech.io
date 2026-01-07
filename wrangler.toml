@@ -9,6 +9,9 @@ name = "xaostech-account"
 main = "src/index.ts"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
 
+# Runtime secrets for OAuth (set via wrangler secret put --env production)
+# GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+
 [env.production.vars]
 OAUTH_PROVIDER = "github"
 COOKIE_DOMAIN = ".xaostech.io"
@@ -25,10 +28,6 @@ id = "${KV_SESSIONS_ID}"
 binding = "DB"
 database_name = "account-db"
 database_id = "${D1_ACCOUNT_DB_ID}"
-
-[[env.production.r2_buckets]]
-binding = "IMG"
-bucket_name = "img"
 
 [env.testing]
 routes = [{ pattern = "account.testing.local/*", zone_name = "localhost" }]

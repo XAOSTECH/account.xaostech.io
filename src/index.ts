@@ -13,6 +13,10 @@ interface Env {
   EMAIL_QUEUE?: Queue; // For async email sending
   MAX_LOGIN_ATTEMPTS: string;
   LOCKOUT_DURATION_MIN: string;
+
+  // GitHub OAuth
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 }
 
 interface User {
@@ -25,7 +29,17 @@ interface User {
   two_fa_enabled: boolean;
 }
 
+import { applySecurityHeaders } from '../shared/types/security';
+import { createApiProxyRoute } from '../shared/types/api-proxy-hono';
+
 const app = new Hono<{ Bindings: Env }>();
+
+// Global security headers middleware
+app.use('*', async (c, next) => {
+  await next();
+  const res = c.res as Response;
+  return applySecurityHeaders(res);
+});
 
 // Schemas for validation
 const PasswordSchema = z.object({
@@ -41,44 +55,92 @@ const EmailSchema = z.object({
   email: z.string().email(),
 });
 
-app.get('/health', (c) => c.json({ status: 'ok' }));
+// ============ LANDING PAGE ============
+app.get('/', async (c) => {
+  // Check if user has session
+  const cookie = c.req.header('Cookie') || '';
+  const sessionMatch = cookie.match(/session=([^;]+)/);
+  const sessionId = sessionMatch ? sessionMatch[1] : null;
+  
+  let user = null;
+  if (sessionId) {
+    try {
+      const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+      if (sessionData) {
+        const parsed = JSON.parse(sessionData);
+        if (!parsed.expires || parsed.expires > Date.now()) {
+          user = parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Session read error:', e);
+    }
+  }
 
-// === DEBUG: ENV PRESENCE ===
-app.get('/debug/env', (c) => {
-  const cEnvHasClientId = !!(c.env && (c.env as any).CF_ACCESS_CLIENT_ID);
-  const cEnvHasClientSecret = !!(c.env && (c.env as any).CF_ACCESS_CLIENT_SECRET);
-  const processEnvHasClientId = !!(globalThis as any)?.process?.env?.CF_ACCESS_CLIENT_ID;
-  const processEnvHasClientSecret = !!(globalThis as any)?.process?.env?.CF_ACCESS_CLIENT_SECRET;
-  return c.json({ cEnvHasClientId, cEnvHasClientSecret, processEnvHasClientId, processEnvHasClientSecret });
+  const userSection = user ? 
+    '<div class="user-card">' +
+    '<img src="' + (user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png') + '" alt="Avatar" class="avatar">' +
+    '<div class="user-info">' +
+    '<h2>' + (user.username || 'User') + '</h2>' +
+    '<p>' + (user.email || '') + '</p>' +
+    '</div></div>' +
+    '<div class="actions">' +
+    '<a href="/profile" class="btn">View Profile</a>' +
+    '<a href="/service-accounts" class="btn secondary">API Keys</a>' +
+    '<form action="/logout" method="POST" style="display:inline">' +
+    '<button type="submit" class="btn secondary">Logout</button>' +
+    '</form></div>'
+    : 
+    '<div class="login-section">' +
+    '<h2>Sign in to your account</h2>' +
+    '<p>Access your XAOSTECH dashboard, manage API keys, and more.</p>' +
+    '<a href="/auth/github" class="btn github-btn">' +
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>' +
+    'Sign in with GitHub</a></div>';
+
+  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XAOSTECH Account</title><link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png"><style>:root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; } .container { max-width: 500px; width: 100%; text-align: center; } h1 { color: var(--primary); margin-bottom: 2rem; font-size: 2rem; } .user-card { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 2rem; border-radius: 12px; margin-bottom: 2rem; } .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--primary); } .user-info { text-align: left; } .user-info h2 { margin-bottom: 0.25rem; } .user-info p { opacity: 0.7; font-size: 0.9rem; } .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; } .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; font-size: 1rem; } .btn:hover { opacity: 0.9; } .btn.secondary { background: transparent; border: 2px solid var(--primary); color: var(--primary); } .btn.github-btn { background: #24292e; color: #fff; padding: 1rem 2rem; font-size: 1.1rem; } .btn.github-btn:hover { background: #2f363d; } .login-section { background: var(--card-bg); padding: 3rem 2rem; border-radius: 12px; } .login-section h2 { margin-bottom: 0.5rem; } .login-section p { opacity: 0.7; margin-bottom: 2rem; } footer { margin-top: 3rem; opacity: 0.5; font-size: 0.85rem; } footer a { color: var(--primary); }</style></head><body><div class="container"><h1>🔐 XAOSTECH Account</h1>' + userSection + '</div><footer><a href="https://xaostech.io">← Back to XAOSTECH</a></footer></body></html>';
+  return c.html(html);
 });
 
-// === DEBUG: DIRECT FETCH TEST ===
-app.get('/debug/fetch-direct', async (c) => {
+// ============ CURRENT USER (from cookie) ============
+app.get('/me', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const sessionMatch = cookie.match(/session=([^;]+)/);
+  const sessionId = sessionMatch ? sessionMatch[1] : null;
+  
+  if (!sessionId) {
+    return c.json({ authenticated: false }, 401);
+  }
+  
   try {
-    const clientId = (c.env as any)?.CF_ACCESS_CLIENT_ID;
-    const clientSecret = (c.env as any)?.CF_ACCESS_CLIENT_SECRET;
-
-    const headers: Record<string, string> = { 'User-Agent': 'XAOSTECH debug fetch' };
-    if (clientId && clientSecret) {
-      headers['CF-Access-Client-Id'] = clientId;
-      headers['CF-Access-Client-Secret'] = clientSecret;
-      headers['X-Proxy-CF-Injected'] = 'direct-test';
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ authenticated: false, error: 'Session not found' }, 401);
     }
-
-    const resp = await fetch('https://api.xaostech.io/debug/headers', { method: 'GET', headers });
-    const contentType = resp.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const json = await resp.json();
-      return c.json({ proxiedDirect: json, status: resp.status });
+    
+    const user = JSON.parse(sessionData);
+    if (user.expires && user.expires < Date.now()) {
+      await c.env.SESSIONS_KV.delete(sessionId);
+      return c.json({ authenticated: false, error: 'Session expired' }, 401);
     }
-
-    const txt = await resp.text();
-    return c.json({ status: resp.status, contentType, bodyStartsWith: txt.slice(0, 200) });
-  } catch (err: any) {
-    console.error('[debug/fetch-direct] error:', err);
-    return c.json({ error: 'fetch direct failed', message: err.message }, 500);
+    
+    return c.json({
+      authenticated: true,
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      avatar_url: user.avatar_url,
+    });
+  } catch (err) {
+    console.error('Me endpoint error:', err);
+    return c.json({ authenticated: false, error: 'Failed to fetch user' }, 500);
   }
 });
+
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// API proxy: route /api/* to api.xaostech.io with injected credentials
+app.all('/api/*', createApiProxyRoute());
 
 /**
  * Verify Endpoint - Called by api.xaostech.io middleware
@@ -208,33 +270,109 @@ app.post('/verify', async (c) => {
 
 // ===== AUTHENTICATION =====
 
-app.post('/authorize', async (c) => {
-  // OAuth flow stub - redirects to provider or returns auth code
-  const redirectUri = c.req.query('redirect_uri');
-  return c.json({ 
-    auth_url: `https://oauth-provider.com/authorize?redirect_uri=${redirectUri}` 
-  });
+// GitHub OAuth - redirect to GitHub's authorize page (state stored in RECOVERY_CODES_KV)
+app.get('/auth/github', async (c) => {
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const redirectUri = `${c.req.url.split('?')[0].replace(/\/auth\/github$/, '')}/auth/github/callback`;
+  if (!clientId) return c.json({ error: 'GitHub OAuth not configured' }, 500);
+
+  const state = crypto.randomUUID();
+  // store short-lived state
+  await c.env.RECOVERY_CODES_KV.put(`gh_state:${state}`, '1', { expirationTtl: 600 });
+
+  const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${encodeURIComponent(state)}`;
+  return c.redirect(authUrl, 302);
 });
 
-app.post('/callback', async (c) => {
-  // OAuth callback - exchanges code for token, creates session
-  const { code } = await c.req.json();
+app.get('/auth/github/callback', async (c) => {
+  const code = c.req.query('code');
+  const state = c.req.query('state');
+  if (!code || !state) return c.json({ error: 'Missing code or state' }, 400);
+
+  // validate state
+  const stateKey = `gh_state:${state}`;
+  const ok = await c.env.RECOVERY_CODES_KV.get(stateKey);
+  if (!ok) return c.json({ error: 'Invalid or expired state' }, 400);
+  await c.env.RECOVERY_CODES_KV.delete(stateKey);
+
+  const clientId = c.env.GITHUB_CLIENT_ID;
+  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return c.json({ error: 'GitHub OAuth not configured' }, 500);
 
   try {
-    // Validate code, fetch user from provider
-    const user = { id: 'user123', email: 'user@example.com', username: 'user' };
-    
-    // Store session
-    const sessionId = crypto.randomUUID();
-    const expires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
-    
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify({ ...user, expires }), {
-      expirationTtl: 7 * 24 * 60 * 60
+    // Exchange code for token
+    const tokenResp = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code })
     });
-    
-    return c.json({ session_id: sessionId, user });
+    const tokenJson = await tokenResp.json();
+    if (!tokenJson || !tokenJson.access_token) return c.json({ error: 'Token exchange failed' }, 400);
+
+    // Fetch profile
+    const profileRes = await fetch('https://api.github.com/user', {
+      headers: { Authorization: `token ${tokenJson.access_token}`, 'User-Agent': 'XAOSTECH' }
+    });
+    const profile = await profileRes.json();
+
+    // Fetch emails
+    const emailsRes = await fetch('https://api.github.com/user/emails', {
+      headers: { Authorization: `token ${tokenJson.access_token}`, 'User-Agent': 'XAOSTECH' }
+    });
+    const emails = await emailsRes.json();
+    const primary = (Array.isArray(emails) && (emails.find(e => e.primary && e.verified) || emails.find(e => e.verified) || emails[0])) || null;
+    const email = primary?.email || profile.email || null;
+
+    // Upsert user
+    let userId: string | null = null;
+    const existing = await c.env.DB.prepare('SELECT id, username FROM users WHERE provider = ? AND provider_user_id = ?').bind('github', String(profile.id)).first();
+    if (existing && existing.id) {
+      userId = existing.id;
+      await c.env.DB.prepare('UPDATE users SET avatar_url = ?, email = ? WHERE id = ?').bind(profile.avatar_url || null, email || null, userId).run();
+    } else if (email) {
+      const byEmail = await c.env.DB.prepare('SELECT id, username FROM users WHERE email = ?').bind(email).first();
+      if (byEmail && byEmail.id) {
+        userId = byEmail.id;
+        await c.env.DB.prepare('UPDATE users SET provider = ?, provider_user_id = ? WHERE id = ?').bind('github', String(profile.id), userId).run();
+        await c.env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(profile.avatar_url || null, userId).run();
+      } else {
+        // create new user
+        userId = crypto.randomUUID();
+        let username = (profile.login || (profile.name || '').replace(/\s+/g, '_').toLowerCase() || `gh_${profile.id}`).slice(0, 50);
+        // ensure username unique
+        let exists = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
+        let suffix = 1;
+        while (exists) {
+          const candidate = `${username}${suffix}`;
+          exists = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(candidate).first();
+          if (!exists) { username = candidate; break; }
+          suffix++;
+        }
+
+        await c.env.DB.prepare('INSERT INTO users (id, email, username, avatar_url, provider, provider_user_id) VALUES (?,?,?,?,?,?)')
+          .bind(userId, email, username, profile.avatar_url || null, 'github', String(profile.id)).run();
+      }
+    } else {
+      // No email available - reject
+      return c.json({ error: 'GitHub did not provide an email address' }, 400);
+    }
+
+    // Create session
+    const sessionId = crypto.randomUUID();
+    const ttl = parseInt(c.env.SESSION_TTL || '604800');
+    const expires = Date.now() + ttl * 1000;
+    const userRecord = await c.env.DB.prepare('SELECT id, email, username, avatar_url FROM users WHERE id = ?').bind(userId).first();
+
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify({ id: userRecord.id, email: userRecord.email, username: userRecord.username, avatar_url: userRecord.avatar_url, expires }), {
+      expirationTtl: ttl
+    });
+
+    // Set session cookie and redirect to front page
+    const cookie = `session=${sessionId}; Path=/; HttpOnly; Secure; Max-Age=${ttl}`;
+    return new Response(null, { status: 302, headers: { Location: '/', 'Set-Cookie': cookie } });
   } catch (err) {
-    return c.json({ error: 'Auth failed' }, 400);
+    console.error('GitHub OAuth error:', err);
+    return c.json({ error: 'GitHub authentication failed' }, 500);
   }
 });
 
