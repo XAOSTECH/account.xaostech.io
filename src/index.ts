@@ -13,10 +13,7 @@ interface Env {
   EMAIL_QUEUE?: Queue; // For async email sending
   MAX_LOGIN_ATTEMPTS: string;
   LOCKOUT_DURATION_MIN: string;
-
-  // GitHub OAuth
-  GITHUB_CLIENT_ID?: string;
-  GITHUB_CLIENT_SECRET?: string;
+  SESSION_TTL: string;
 }
 
 interface User {
@@ -31,6 +28,7 @@ interface User {
 
 import { applySecurityHeaders } from '../shared/types/security';
 import { createApiProxyRoute } from '../shared/types/api-proxy-hono';
+import { serveFaviconHono } from '../shared/types/favicon';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -40,6 +38,11 @@ app.use('*', async (c, next) => {
   const res = c.res as Response;
   return applySecurityHeaders(res);
 });
+
+// Favicon
+app.get('/favicon.ico', serveFaviconHono);
+
+
 
 // Schemas for validation
 const PasswordSchema = z.object({
@@ -59,7 +62,7 @@ const EmailSchema = z.object({
 app.get('/', async (c) => {
   // Check if user has session
   const cookie = c.req.header('Cookie') || '';
-  const sessionMatch = cookie.match(/session=([^;]+)/);
+  const sessionMatch = cookie.match(/session_id=([^;]+)/);
   const sessionId = sessionMatch ? sessionMatch[1] : null;
   
   let user = null;
@@ -94,7 +97,7 @@ app.get('/', async (c) => {
     '<div class="login-section">' +
     '<h2>Sign in to your account</h2>' +
     '<p>Access your XAOSTECH dashboard, manage API keys, and more.</p>' +
-    '<a href="/auth/github" class="btn github-btn">' +
+    '<a href="/api/auth/github/login" class="btn github-btn">' +
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>' +
     'Sign in with GitHub</a></div>';
 
@@ -102,10 +105,10 @@ app.get('/', async (c) => {
   return c.html(html);
 });
 
-// ============ CURRENT USER (from cookie) ============
+// ============ CURRENT USER (from session cookie) ============
 app.get('/me', async (c) => {
   const cookie = c.req.header('Cookie') || '';
-  const sessionMatch = cookie.match(/session=([^;]+)/);
+  const sessionMatch = cookie.match(/session_id=([^;]+)/);
   const sessionId = sessionMatch ? sessionMatch[1] : null;
   
   if (!sessionId) {
@@ -126,10 +129,12 @@ app.get('/me', async (c) => {
     
     return c.json({
       authenticated: true,
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      avatar_url: user.avatar_url,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        avatar_url: user.avatar_url,
+      }
     });
   } catch (err) {
     console.error('Me endpoint error:', err);
@@ -268,111 +273,26 @@ app.post('/verify', async (c) => {
   }
 });
 
-// ===== AUTHENTICATION =====
+// ===== ACCOUNT MANAGEMENT (Session-Based Only) =====
+// Account worker is NOT responsible for OAuth - that's handled by API worker
+// This worker only displays and manages user accounts based on session cookies set by API
 
-// GitHub OAuth - redirect to GitHub's authorize page (state stored in RECOVERY_CODES_KV)
-app.get('/auth/github', async (c) => {
-  const clientId = c.env.GITHUB_CLIENT_ID;
-  const redirectUri = `${c.req.url.split('?')[0].replace(/\/auth\/github$/, '')}/auth/github/callback`;
-  if (!clientId) return c.json({ error: 'GitHub OAuth not configured' }, 500);
-
-  const state = crypto.randomUUID();
-  // store short-lived state
-  await c.env.RECOVERY_CODES_KV.put(`gh_state:${state}`, '1', { expirationTtl: 600 });
-
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user%20user:email&state=${encodeURIComponent(state)}`;
-  return c.redirect(authUrl, 302);
-});
-
-app.get('/auth/github/callback', async (c) => {
-  const code = c.req.query('code');
-  const state = c.req.query('state');
-  if (!code || !state) return c.json({ error: 'Missing code or state' }, 400);
-
-  // validate state
-  const stateKey = `gh_state:${state}`;
-  const ok = await c.env.RECOVERY_CODES_KV.get(stateKey);
-  if (!ok) return c.json({ error: 'Invalid or expired state' }, 400);
-  await c.env.RECOVERY_CODES_KV.delete(stateKey);
-
-  const clientId = c.env.GITHUB_CLIENT_ID;
-  const clientSecret = c.env.GITHUB_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return c.json({ error: 'GitHub OAuth not configured' }, 500);
+// Session validation endpoint - called by API or other workers to verify session
+app.post('/verify', async (c) => {
+  const token = c.req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) return c.json({ error: 'No token' }, 401);
 
   try {
-    // Exchange code for token
-    const tokenResp = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code })
-    });
-    const tokenJson = await tokenResp.json();
-    if (!tokenJson || !tokenJson.access_token) return c.json({ error: 'Token exchange failed' }, 400);
-
-    // Fetch profile
-    const profileRes = await fetch('https://api.github.com/user', {
-      headers: { Authorization: `token ${tokenJson.access_token}`, 'User-Agent': 'XAOSTECH' }
-    });
-    const profile = await profileRes.json();
-
-    // Fetch emails
-    const emailsRes = await fetch('https://api.github.com/user/emails', {
-      headers: { Authorization: `token ${tokenJson.access_token}`, 'User-Agent': 'XAOSTECH' }
-    });
-    const emails = await emailsRes.json();
-    const primary = (Array.isArray(emails) && (emails.find(e => e.primary && e.verified) || emails.find(e => e.verified) || emails[0])) || null;
-    const email = primary?.email || profile.email || null;
-
-    // Upsert user
-    let userId: string | null = null;
-    const existing = await c.env.DB.prepare('SELECT id, username FROM users WHERE provider = ? AND provider_user_id = ?').bind('github', String(profile.id)).first();
-    if (existing && existing.id) {
-      userId = existing.id;
-      await c.env.DB.prepare('UPDATE users SET avatar_url = ?, email = ? WHERE id = ?').bind(profile.avatar_url || null, email || null, userId).run();
-    } else if (email) {
-      const byEmail = await c.env.DB.prepare('SELECT id, username FROM users WHERE email = ?').bind(email).first();
-      if (byEmail && byEmail.id) {
-        userId = byEmail.id;
-        await c.env.DB.prepare('UPDATE users SET provider = ?, provider_user_id = ? WHERE id = ?').bind('github', String(profile.id), userId).run();
-        await c.env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(profile.avatar_url || null, userId).run();
-      } else {
-        // create new user
-        userId = crypto.randomUUID();
-        let username = (profile.login || (profile.name || '').replace(/\s+/g, '_').toLowerCase() || `gh_${profile.id}`).slice(0, 50);
-        // ensure username unique
-        let exists = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first();
-        let suffix = 1;
-        while (exists) {
-          const candidate = `${username}${suffix}`;
-          exists = await c.env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(candidate).first();
-          if (!exists) { username = candidate; break; }
-          suffix++;
-        }
-
-        await c.env.DB.prepare('INSERT INTO users (id, email, username, avatar_url, provider, provider_user_id) VALUES (?,?,?,?,?,?)')
-          .bind(userId, email, username, profile.avatar_url || null, 'github', String(profile.id)).run();
-      }
-    } else {
-      // No email available - reject
-      return c.json({ error: 'GitHub did not provide an email address' }, 400);
+    const sessionData = await c.env.SESSIONS_KV.get(token);
+    if (!sessionData) return c.json({ error: 'Invalid token' }, 401);
+    const user = JSON.parse(sessionData);
+    if (user.expires && user.expires < Date.now()) {
+      await c.env.SESSIONS_KV.delete(token);
+      return c.json({ error: 'Token expired' }, 401);
     }
-
-    // Create session
-    const sessionId = crypto.randomUUID();
-    const ttl = parseInt(c.env.SESSION_TTL || '604800');
-    const expires = Date.now() + ttl * 1000;
-    const userRecord = await c.env.DB.prepare('SELECT id, email, username, avatar_url FROM users WHERE id = ?').bind(userId).first();
-
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify({ id: userRecord.id, email: userRecord.email, username: userRecord.username, avatar_url: userRecord.avatar_url, expires }), {
-      expirationTtl: ttl
-    });
-
-    // Set session cookie and redirect to front page
-    const cookie = `session=${sessionId}; Path=/; HttpOnly; Secure; Max-Age=${ttl}`;
-    return new Response(null, { status: 302, headers: { Location: '/', 'Set-Cookie': cookie } });
-  } catch (err) {
-    console.error('GitHub OAuth error:', err);
-    return c.json({ error: 'GitHub authentication failed' }, 500);
+    return c.json(user);
+  } catch (e) {
+    return c.json({ error: 'Verification failed' }, 500);
   }
 });
 
