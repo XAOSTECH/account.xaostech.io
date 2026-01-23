@@ -277,24 +277,8 @@ app.post('/verify', async (c) => {
 // Account worker is NOT responsible for OAuth - that's handled by API worker
 // This worker only displays and manages user accounts based on session cookies set by API
 
-// Session validation endpoint - called by API or other workers to verify session
-app.post('/verify', async (c) => {
-  const token = c.req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return c.json({ error: 'No token' }, 401);
-
-  try {
-    const sessionData = await c.env.SESSIONS_KV.get(token);
-    if (!sessionData) return c.json({ error: 'Invalid token' }, 401);
-    const user = JSON.parse(sessionData);
-    if (user.expires && user.expires < Date.now()) {
-      await c.env.SESSIONS_KV.delete(token);
-      return c.json({ error: 'Token expired' }, 401);
-    }
-    return c.json(user);
-  } catch (e) {
-    return c.json({ error: 'Verification failed' }, 500);
-  }
-});
+// Note: Primary /verify endpoint is defined earlier (line ~159) with full tokenType support
+// This legacy endpoint below is DEPRECATED - keeping for backwards compatibility temporarily
 
 app.get('/profile', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
@@ -976,6 +960,281 @@ app.post('/service-account/:account_id/toggle', async (c) => {
   } catch (err) {
     console.error('Service account toggle error:', err);
     return c.json({ error: 'Failed to update service account' }, 500);
+  }
+});
+
+// ===== USER API KEYS =====
+// Allows authenticated users to create API keys for CLI/programmatic access
+// Keys inherit user identity but can have restricted scopes
+
+/**
+ * Generate a secure API key with prefix
+ * Format: xk_<32 random hex chars> (total 35 chars)
+ */
+async function generateApiKey(): Promise<{ key: string; prefix: string; hash: string }> {
+  const randomBytes = crypto.getRandomValues(new Uint8Array(24));
+  const key = 'xk_' + Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const prefix = key.slice(0, 11); // "xk_" + first 8 hex chars
+  
+  // Hash the full key for storage
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  return { key, prefix, hash };
+}
+
+/**
+ * Hash an API key for verification
+ */
+async function hashApiKey(key: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(key);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Create a new API key
+app.post('/api-keys', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  if (!sessionId) return c.json({ error: 'Unauthorised' }, 401);
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) return c.json({ error: 'Session expired' }, 401);
+    const user = JSON.parse(sessionData);
+
+    const body = await c.req.json().catch(() => ({}));
+    const { name, scopes, rate_limit, expires_in_days, allowed_ips } = body;
+    
+    if (!name || typeof name !== 'string' || name.length < 1 || name.length > 64) {
+      return c.json({ error: 'Name required (1-64 characters)' }, 400);
+    }
+
+    // Validate scopes if provided
+    const validScopes = ['read', 'write', 'admin', 'lingua', 'blog', 'chat', 'edu', 'data'];
+    const keyScopes = scopes || ['read'];
+    if (!Array.isArray(keyScopes) || keyScopes.some((s: string) => !validScopes.includes(s))) {
+      return c.json({ error: `Invalid scopes. Valid: ${validScopes.join(', ')}` }, 400);
+    }
+
+    // Non-admin users cannot create admin-scoped keys
+    if (keyScopes.includes('admin') && !user.is_admin) {
+      return c.json({ error: 'Cannot create admin-scoped key without admin privileges' }, 403);
+    }
+
+    // Generate the key
+    const { key, prefix, hash } = await generateApiKey();
+
+    // Calculate expiration if provided
+    let expiresAt = null;
+    if (expires_in_days && typeof expires_in_days === 'number' && expires_in_days > 0) {
+      const expDate = new Date();
+      expDate.setDate(expDate.getDate() + expires_in_days);
+      expiresAt = expDate.toISOString().replace('T', ' ').replace('Z', '');
+    }
+
+    // Check if user already has key with this name
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM user_api_keys WHERE user_id = ? AND name = ?'
+    ).bind(user.id, name).first();
+    if (existing) {
+      return c.json({ error: 'Key with this name already exists' }, 409);
+    }
+
+    // Limit: max 10 keys per user
+    const countResult = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM user_api_keys WHERE user_id = ?'
+    ).bind(user.id).first() as { count: number } | null;
+    if (countResult && countResult.count >= 10) {
+      return c.json({ error: 'Maximum 10 API keys per user' }, 400);
+    }
+
+    await c.env.DB.prepare(`
+      INSERT INTO user_api_keys (user_id, name, key_prefix, key_hash, scopes, rate_limit, allowed_ips, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      user.id,
+      name,
+      prefix,
+      hash,
+      JSON.stringify(keyScopes),
+      rate_limit || 60,
+      allowed_ips ? JSON.stringify(allowed_ips) : null,
+      expiresAt
+    ).run();
+
+    // Return the key ONLY ONCE - user must save it
+    return c.json({
+      message: 'API key created. Save this key - it will not be shown again.',
+      key,
+      prefix,
+      name,
+      scopes: keyScopes,
+      rate_limit: rate_limit || 60,
+      expires_at: expiresAt,
+    }, 201);
+  } catch (err) {
+    console.error('API key creation error:', err);
+    return c.json({ error: 'Failed to create API key' }, 500);
+  }
+});
+
+// List user's API keys (without revealing the actual keys)
+app.get('/api-keys', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  if (!sessionId) return c.json({ error: 'Unauthorised' }, 401);
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) return c.json({ error: 'Session expired' }, 401);
+    const user = JSON.parse(sessionData);
+
+    const keys = await c.env.DB.prepare(`
+      SELECT id, name, key_prefix, scopes, rate_limit, allowed_ips, active, expires_at, 
+             last_used_at, last_used_ip, use_count, created_at
+      FROM user_api_keys 
+      WHERE user_id = ? 
+      ORDER BY created_at DESC
+    `).bind(user.id).all();
+
+    return c.json({ 
+      keys: keys.results?.map((k: any) => ({
+        ...k,
+        scopes: JSON.parse(k.scopes || '[]'),
+        allowed_ips: k.allowed_ips ? JSON.parse(k.allowed_ips) : null,
+        active: !!k.active,
+      })) || []
+    });
+  } catch (err) {
+    console.error('API key list error:', err);
+    return c.json({ error: 'Failed to list API keys' }, 500);
+  }
+});
+
+// Delete an API key
+app.delete('/api-keys/:key_id', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  if (!sessionId) return c.json({ error: 'Unauthorised' }, 401);
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) return c.json({ error: 'Session expired' }, 401);
+    const user = JSON.parse(sessionData);
+    const keyId = c.req.param('key_id');
+
+    // Verify ownership
+    const key = await c.env.DB.prepare(
+      'SELECT user_id FROM user_api_keys WHERE id = ?'
+    ).bind(keyId).first();
+
+    if (!key || (key as any).user_id !== user.id) {
+      return c.json({ error: 'Key not found or unauthorised' }, 404);
+    }
+
+    await c.env.DB.prepare('DELETE FROM user_api_keys WHERE id = ?').bind(keyId).run();
+
+    return c.json({ message: 'API key deleted' });
+  } catch (err) {
+    console.error('API key deletion error:', err);
+    return c.json({ error: 'Failed to delete API key' }, 500);
+  }
+});
+
+// Toggle API key active state
+app.patch('/api-keys/:key_id', async (c) => {
+  const sessionId = c.req.header('Authorization')?.split(' ')[1];
+  if (!sessionId) return c.json({ error: 'Unauthorised' }, 401);
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) return c.json({ error: 'Session expired' }, 401);
+    const user = JSON.parse(sessionData);
+    const keyId = c.req.param('key_id');
+    const { active } = await c.req.json().catch(() => ({}));
+
+    // Verify ownership
+    const key = await c.env.DB.prepare(
+      'SELECT user_id FROM user_api_keys WHERE id = ?'
+    ).bind(keyId).first();
+
+    if (!key || (key as any).user_id !== user.id) {
+      return c.json({ error: 'Key not found or unauthorised' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      'UPDATE user_api_keys SET active = ?, updated_at = datetime("now") WHERE id = ?'
+    ).bind(active ? 1 : 0, keyId).run();
+
+    return c.json({ message: `API key ${active ? 'enabled' : 'disabled'}` });
+  } catch (err) {
+    console.error('API key update error:', err);
+    return c.json({ error: 'Failed to update API key' }, 500);
+  }
+});
+
+// Verify an API key (called by API worker middleware)
+app.post('/verify-api-key', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const { apiKey } = body;
+  
+  if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('xk_')) {
+    return c.json({ valid: false, error: 'Invalid API key format' }, 400);
+  }
+
+  try {
+    const keyHash = await hashApiKey(apiKey);
+    const clientIp = c.req.header('CF-Connecting-IP') || c.req.header('X-Real-IP') || 'unknown';
+
+    // Look up the key
+    const keyRecord = await c.env.DB.prepare(`
+      SELECT k.*, u.id as owner_id, u.email, u.username, u.is_admin
+      FROM user_api_keys k
+      JOIN users u ON k.user_id = u.id
+      WHERE k.key_hash = ? AND k.active = 1
+    `).bind(keyHash).first() as any;
+
+    if (!keyRecord) {
+      return c.json({ valid: false, error: 'Invalid or inactive API key' }, 401);
+    }
+
+    // Check expiration
+    if (keyRecord.expires_at && new Date(keyRecord.expires_at) < new Date()) {
+      return c.json({ valid: false, error: 'API key expired' }, 401);
+    }
+
+    // Check IP allowlist if set
+    if (keyRecord.allowed_ips) {
+      const allowedIps = JSON.parse(keyRecord.allowed_ips);
+      if (allowedIps.length > 0 && !allowedIps.includes(clientIp)) {
+        return c.json({ valid: false, error: 'IP not allowed' }, 403);
+      }
+    }
+
+    // Update usage stats (async, don't wait)
+    c.env.DB.prepare(`
+      UPDATE user_api_keys 
+      SET last_used_at = datetime("now"), last_used_ip = ?, use_count = use_count + 1
+      WHERE id = ?
+    `).bind(clientIp, keyRecord.id).run();
+
+    // Return user context
+    return c.json({
+      valid: true,
+      userId: keyRecord.owner_id,
+      email: keyRecord.email,
+      username: keyRecord.username,
+      isAdmin: !!keyRecord.is_admin,
+      isApiKey: true,
+      keyId: keyRecord.id,
+      keyName: keyRecord.name,
+      scopes: JSON.parse(keyRecord.scopes || '[]'),
+      rateLimit: keyRecord.rate_limit,
+    });
+  } catch (err) {
+    console.error('API key verification error:', err);
+    return c.json({ valid: false, error: 'Verification failed' }, 500);
   }
 });
 
