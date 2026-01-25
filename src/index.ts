@@ -99,8 +99,9 @@ app.get('/', async (c) => {
     '</div></div>' +
     (user.isNewUser ? '<div class="welcome-banner"><strong>🎉 Welcome to XAOSTECH!</strong> Visit <a href="/service-accounts">API Keys</a> to get your access token.</div>' : '') +
     '<div class="actions">' +
-    '<a href="/profile" class="btn">View Profile</a>' +
+    '<a href="/profile" class="btn">Edit Profile</a>' +
     '<a href="/service-accounts" class="btn secondary">API Keys</a>' +
+    (user.role === 'owner' ? '<a href="/admin" class="btn secondary" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">👑 Admin</a>' : '') +
     '<form action="/logout" method="POST" style="display:inline">' +
     '<button type="submit" class="btn secondary">Logout</button>' +
     '</form></div>'
@@ -702,7 +703,8 @@ app.post('/verify', async (c) => {
 // Note: Primary /verify endpoint is defined earlier (line ~159) with full tokenType support
 // This legacy endpoint below is DEPRECATED - keeping for backwards compatibility temporarily
 
-app.get('/profile', async (c) => {
+// GET /profile/json - API endpoint to fetch profile data
+app.get('/profile/json', async (c) => {
   // Read session from cookie (browser request) or Authorization header (API request)
   const cookie = c.req.header('Cookie') || '';
   const cookieMatch = cookie.match(/session_id=([^;]+)/);
@@ -727,6 +729,686 @@ app.get('/profile', async (c) => {
     return c.json(user);
   } catch (err) {
     return c.json({ error: 'Failed to fetch profile' }, 500);
+  }
+});
+
+// GET /profile - Profile editing page
+app.get('/profile', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.redirect('/');
+  }
+
+  const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+  if (!sessionData) {
+    return c.redirect('/');
+  }
+
+  const user = JSON.parse(sessionData);
+  if (user.expires && user.expires < Date.now()) {
+    return c.redirect('/');
+  }
+
+  // Role badge styling
+  const roleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      owner: 'background: linear-gradient(135deg, #f6821f, #e65100); color: #fff;',
+      admin: 'background: #7c3aed; color: #fff;',
+      user: 'background: #333; color: #aaa;',
+    };
+    return `<span style="display:inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold; ${colors[role] || colors.user}">${role.toUpperCase()}</span>`;
+  };
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile - XAOSTECH Account</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; --error: #e53935; --success: #43a047; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; margin-bottom: 1.5rem; }
+    .avatar-section { display: flex; align-items: center; gap: 2rem; margin-bottom: 2rem; }
+    .avatar { width: 100px; height: 100px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover; }
+    .avatar-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    .form-group input { width: 100%; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 6px; background: #0a0a0a; color: #fff; font-size: 1rem; }
+    .form-group input:focus { outline: none; border-color: var(--primary); }
+    .form-group input:disabled { opacity: 0.5; cursor: not-allowed; }
+    .form-group .hint { font-size: 0.8rem; opacity: 0.6; margin-top: 0.25rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; text-decoration: none; }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-github { background: #24292e; color: #fff; }
+    .btn-small { padding: 0.5rem 1rem; font-size: 0.9rem; }
+    .alert { padding: 1rem; border-radius: 6px; margin-bottom: 1rem; display: none; }
+    .alert-error { background: rgba(229,57,53,0.1); border: 1px solid var(--error); color: var(--error); }
+    .alert-success { background: rgba(67,160,71,0.1); border: 1px solid var(--success); color: var(--success); }
+    .role-section { display: flex; align-items: center; gap: 1rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .github-info { background: #0d1117; border: 1px solid #30363d; padding: 1rem; border-radius: 8px; margin-top: 1rem; }
+    .github-info p { color: #8b949e; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back">← Back to Dashboard</a>
+    <h1>Edit Profile</h1>
+    <p class="subtitle">Manage your XAOSTECH account information</p>
+    
+    <div id="alert-error" class="alert alert-error"></div>
+    <div id="alert-success" class="alert alert-success"></div>
+    
+    <div class="card">
+      <h3 style="margin-bottom: 1.5rem;">Profile Photo</h3>
+      <div class="avatar-section">
+        <img src="${user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'}" alt="Avatar" class="avatar" id="avatar-preview">
+        <div class="avatar-actions">
+          <input type="file" id="avatar-upload" accept="image/*" style="display:none;">
+          <button class="btn btn-secondary btn-small" onclick="document.getElementById('avatar-upload').click()">📷 Upload New</button>
+          ${user.github_avatar_url ? `<button class="btn btn-github btn-small" onclick="resetToGitHub()">🔄 Reset to GitHub</button>` : ''}
+        </div>
+      </div>
+      
+      <form id="profile-form">
+        <div class="form-group">
+          <label for="username">Display Name</label>
+          <input type="text" id="username" name="username" value="${user.username || ''}" required minlength="2" maxlength="50">
+          <p class="hint">This is how you'll appear across XAOSTECH</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" value="${user.email || ''}" disabled>
+          <p class="hint">Email cannot be changed${user.github_id ? ' (linked to GitHub)' : ''}</p>
+        </div>
+        
+        <div class="role-section">
+          <span>Role:</span>
+          ${roleBadge(user.role || 'user')}
+        </div>
+        
+        <div style="margin-top: 2rem;">
+          <button type="submit" class="btn">Save Changes</button>
+        </div>
+      </form>
+      
+      ${user.github_id ? `
+      <div class="github-info">
+        <p><strong>🔗 Linked to GitHub</strong></p>
+        <p style="margin-top: 0.5rem;">Original GitHub username: <code>${user.github_username || user.username}</code></p>
+        <button class="btn btn-secondary btn-small" style="margin-top: 0.75rem;" onclick="restoreGitHubProfile()">Restore GitHub Profile</button>
+      </div>
+      ` : ''}
+    </div>
+    
+    <div class="card" style="border-color: #5a2a2a;">
+      <h3 style="color: #e53935; margin-bottom: 1rem;">⚠️ Danger Zone</h3>
+      <p style="color: #888; margin-bottom: 1rem;">These actions are irreversible. Please be certain.</p>
+      <button class="btn btn-secondary" style="border-color: #e53935; color: #e53935;" onclick="requestAccountDeletion()">Delete Account</button>
+    </div>
+  </div>
+
+  <script>
+    const alertError = document.getElementById('alert-error');
+    const alertSuccess = document.getElementById('alert-success');
+
+    function showError(msg) {
+      alertError.textContent = msg;
+      alertError.style.display = 'block';
+      alertSuccess.style.display = 'none';
+    }
+
+    function showSuccess(msg) {
+      alertSuccess.textContent = msg;
+      alertSuccess.style.display = 'block';
+      alertError.style.display = 'none';
+    }
+
+    document.getElementById('avatar-upload').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (file.size > 2 * 1024 * 1024) {
+        showError('Image must be smaller than 2MB');
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('avatar', file);
+      
+      try {
+        const res = await fetch('/profile/avatar', {
+          method: 'POST',
+          credentials: 'include',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('avatar-preview').src = data.avatar_url;
+          showSuccess('Avatar updated!');
+        } else {
+          showError(data.error || 'Failed to upload avatar');
+        }
+      } catch (err) {
+        showError('Network error');
+      }
+    });
+
+    async function resetToGitHub() {
+      try {
+        const res = await fetch('/profile/reset-github-avatar', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('avatar-preview').src = data.avatar_url;
+          showSuccess('Avatar reset to GitHub!');
+        } else {
+          showError(data.error || 'Failed to reset avatar');
+        }
+      } catch (err) {
+        showError('Network error');
+      }
+    }
+
+    async function restoreGitHubProfile() {
+      if (!confirm('This will restore your username and avatar to match your GitHub profile. Continue?')) return;
+      try {
+        const res = await fetch('/profile/restore-github', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showSuccess('Profile restored to GitHub settings! Refreshing...');
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showError(data.error || 'Failed to restore profile');
+        }
+      } catch (err) {
+        showError('Network error');
+      }
+    }
+
+    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      
+      try {
+        const res = await fetch('/profile', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showSuccess('Profile updated!');
+        } else {
+          showError(data.error || 'Failed to update profile');
+        }
+      } catch (err) {
+        showError('Network error');
+      }
+    });
+
+    function requestAccountDeletion() {
+      if (!confirm('Are you sure you want to delete your account? This will start a 30-day grace period.')) return;
+      fetch('/gdpr/delete-request', {
+        method: 'POST',
+        credentials: 'include'
+      }).then(r => r.json()).then(data => {
+        if (data.deletion_date) {
+          showSuccess('Account deletion scheduled for ' + new Date(data.deletion_date).toLocaleDateString());
+        } else {
+          showError(data.error || 'Failed to request deletion');
+        }
+      }).catch(() => showError('Network error'));
+    }
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// PATCH /profile - Update profile (username)
+app.patch('/profile', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : c.req.header('Authorization')?.split(' ')[1];
+
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const userId = user.userId || user.id;
+    const { username } = await c.req.json();
+
+    if (!username || typeof username !== 'string' || username.length < 2 || username.length > 50) {
+      return c.json({ error: 'Username must be 2-50 characters' }, 400);
+    }
+
+    // Update in database
+    await c.env.DB.prepare(
+      `UPDATE users SET username = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(username, userId).run();
+
+    // Update session
+    user.username = username;
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    });
+
+    return c.json({ message: 'Profile updated', username });
+  } catch (err) {
+    console.error('Profile update error:', err);
+    return c.json({ error: 'Failed to update profile' }, 500);
+  }
+});
+
+// POST /profile/avatar - Upload new avatar
+app.post('/profile/avatar', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const userId = user.userId || user.id;
+
+    const formData = await c.req.formData();
+    const file = formData.get('avatar') as File;
+
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: 'No file provided' }, 400);
+    }
+
+    // For now, store avatar as data URL (in production, use R2 or similar)
+    const buffer = await file.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    const dataUrl = `data:${file.type};base64,${base64}`;
+
+    // Update in database
+    await c.env.DB.prepare(
+      `UPDATE users SET avatar_url = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(dataUrl, userId).run();
+
+    // Update session
+    user.avatar_url = dataUrl;
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    });
+
+    return c.json({ message: 'Avatar updated', avatar_url: dataUrl });
+  } catch (err) {
+    console.error('Avatar upload error:', err);
+    return c.json({ error: 'Failed to upload avatar' }, 500);
+  }
+});
+
+// POST /profile/reset-github-avatar - Reset avatar to GitHub avatar
+app.post('/profile/reset-github-avatar', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const userId = user.userId || user.id;
+
+    if (!user.github_avatar_url) {
+      return c.json({ error: 'No GitHub avatar available' }, 400);
+    }
+
+    // Update in database
+    await c.env.DB.prepare(
+      `UPDATE users SET avatar_url = github_avatar_url, updated_at = datetime('now') WHERE id = ?`
+    ).bind(userId).run();
+
+    // Update session
+    user.avatar_url = user.github_avatar_url;
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    });
+
+    return c.json({ message: 'Avatar reset to GitHub', avatar_url: user.github_avatar_url });
+  } catch (err) {
+    console.error('Reset avatar error:', err);
+    return c.json({ error: 'Failed to reset avatar' }, 500);
+  }
+});
+
+// POST /profile/restore-github - Restore username and avatar from GitHub
+app.post('/profile/restore-github', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  try {
+    const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+    if (!sessionData) {
+      return c.json({ error: 'Session expired' }, 401);
+    }
+
+    const user = JSON.parse(sessionData);
+    const userId = user.userId || user.id;
+
+    if (!user.github_id) {
+      return c.json({ error: 'Account not linked to GitHub' }, 400);
+    }
+
+    // Update in database
+    await c.env.DB.prepare(
+      `UPDATE users SET 
+        username = COALESCE(github_username, username),
+        avatar_url = COALESCE(github_avatar_url, avatar_url),
+        updated_at = datetime('now')
+       WHERE id = ?`
+    ).bind(userId).run();
+
+    // Update session
+    if (user.github_username) user.username = user.github_username;
+    if (user.github_avatar_url) user.avatar_url = user.github_avatar_url;
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    });
+
+    return c.json({ 
+      message: 'Profile restored to GitHub settings',
+      username: user.username,
+      avatar_url: user.avatar_url
+    });
+  } catch (err) {
+    console.error('Restore GitHub profile error:', err);
+    return c.json({ error: 'Failed to restore profile' }, 500);
+  }
+});
+
+// ============ ADMIN PANEL (Owner Only) ============
+
+// GET /admin - Admin panel for user management (owner only)
+app.get('/admin', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.redirect('/');
+  }
+
+  const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+  if (!sessionData) {
+    return c.redirect('/');
+  }
+
+  const user = JSON.parse(sessionData);
+  
+  // Only owner can access admin panel
+  if (user.role !== 'owner') {
+    return c.redirect('/?error=unauthorized');
+  }
+
+  // Fetch all users
+  let users: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT id, username, email, avatar_url, role, github_id, created_at, updated_at
+      FROM users ORDER BY created_at DESC LIMIT 100
+    `).all();
+    users = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch users:', err);
+  }
+
+  const roleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      owner: 'background: linear-gradient(135deg, #f6821f, #e65100); color: #fff;',
+      admin: 'background: #7c3aed; color: #fff;',
+      user: 'background: #333; color: #aaa;',
+    };
+    return `<span style="display:inline-block; padding: 0.2rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: bold; ${colors[role] || colors.user}">${role.toUpperCase()}</span>`;
+  };
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; text-align: center; }
+    .stat-card h3 { font-size: 2rem; color: var(--primary); }
+    .stat-card p { color: #888; margin-top: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: #888; font-weight: 500; font-size: 0.85rem; text-transform: uppercase; }
+    tr:hover { background: rgba(246, 130, 31, 0.05); }
+    .user-info { display: flex; align-items: center; gap: 0.75rem; }
+    .user-avatar { width: 36px; height: 36px; border-radius: 50%; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.5rem 1rem; border-radius: 6px; font-weight: bold; font-size: 0.85rem; border: none; cursor: pointer; text-decoration: none; }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-small { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+    select { background: var(--card-bg); color: var(--text); border: 1px solid var(--border); padding: 0.3rem 0.5rem; border-radius: 4px; }
+    .alert { padding: 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .alert-success { background: rgba(67,160,71,0.1); border: 1px solid #43a047; color: #43a047; }
+    .alert-error { background: rgba(229,57,53,0.1); border: 1px solid #e53935; color: #e53935; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back">← Back to Dashboard</a>
+    <h1>👑 Admin Panel</h1>
+    <p class="subtitle">Manage users and system settings</p>
+    
+    <div id="alert" class="alert" style="display:none;"></div>
+    
+    <div class="stats">
+      <div class="stat-card">
+        <h3>${users.length}</h3>
+        <p>Total Users</p>
+      </div>
+      <div class="stat-card">
+        <h3>${users.filter((u: any) => u.role === 'admin').length}</h3>
+        <p>Admins</p>
+      </div>
+      <div class="stat-card">
+        <h3>${users.filter((u: any) => u.github_id).length}</h3>
+        <p>GitHub Linked</p>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h3 style="margin-bottom: 1rem;">User Management</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${users.map((u: any) => `
+            <tr data-user-id="${u.id}">
+              <td>
+                <div class="user-info">
+                  <img src="${u.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'}" alt="" class="user-avatar">
+                  <div>
+                    <strong>${u.username}</strong>
+                    ${u.github_id ? '<span style="color:#888;font-size:0.8rem;"> (GitHub)</span>' : ''}
+                  </div>
+                </div>
+              </td>
+              <td>${u.email || '-'}</td>
+              <td>${roleBadge(u.role || 'user')}</td>
+              <td style="color:#888;font-size:0.9rem;">${new Date(u.created_at).toLocaleDateString()}</td>
+              <td>
+                ${u.role !== 'owner' ? `
+                  <select onchange="changeRole('${u.id}', this.value)" ${u.role === 'owner' ? 'disabled' : ''}>
+                    <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+                    <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                  </select>
+                ` : '<span style="color:#888;font-style:italic;">Owner</span>'}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function showAlert(msg, type) {
+      const alert = document.getElementById('alert');
+      alert.textContent = msg;
+      alert.className = 'alert alert-' + type;
+      alert.style.display = 'block';
+      setTimeout(() => alert.style.display = 'none', 5000);
+    }
+
+    async function changeRole(userId, newRole) {
+      try {
+        const res = await fetch('/admin/users/' + userId + '/role', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ role: newRole })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showAlert('Role updated to ' + newRole.toUpperCase(), 'success');
+          setTimeout(() => location.reload(), 1500);
+        } else {
+          showAlert(data.error || 'Failed to update role', 'error');
+        }
+      } catch (err) {
+        showAlert('Network error', 'error');
+      }
+    }
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// PATCH /admin/users/:user_id/role - Change user role (owner only)
+app.patch('/admin/users/:user_id/role', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+  if (!sessionData) {
+    return c.json({ error: 'Session expired' }, 401);
+  }
+
+  const currentUser = JSON.parse(sessionData);
+  
+  // Only owner can change roles
+  if (currentUser.role !== 'owner') {
+    return c.json({ error: 'Only owner can change user roles' }, 403);
+  }
+
+  const targetUserId = c.req.param('user_id');
+  const { role } = await c.req.json();
+
+  // Validate role
+  if (!['user', 'admin'].includes(role)) {
+    return c.json({ error: 'Invalid role. Must be user or admin.' }, 400);
+  }
+
+  // Cannot change owner role
+  const targetUser = await c.env.DB.prepare(
+    'SELECT role FROM users WHERE id = ?'
+  ).bind(targetUserId).first() as any;
+
+  if (!targetUser) {
+    return c.json({ error: 'User not found' }, 404);
+  }
+
+  if (targetUser.role === 'owner') {
+    return c.json({ error: 'Cannot change owner role' }, 403);
+  }
+
+  try {
+    await c.env.DB.prepare(
+      `UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(role, targetUserId).run();
+
+    // Audit log
+    await c.env.DB.prepare(
+      `INSERT INTO audit_logs (user_id, action, details, ip, timestamp)
+       VALUES (?, 'role_changed', ?, ?, datetime('now'))`
+    ).bind(
+      currentUser.userId || currentUser.id,
+      JSON.stringify({ target_user: targetUserId, new_role: role }),
+      c.req.header('CF-Connecting-IP') || 'unknown'
+    ).run();
+
+    return c.json({ message: 'Role updated', role });
+  } catch (err) {
+    console.error('Role update error:', err);
+    return c.json({ error: 'Failed to update role' }, 500);
   }
 });
 
