@@ -3390,4 +3390,410 @@ app.get('/family/activity/:id', async (c) => {
   return c.html(html);
 });
 
+// ============ NOTIFICATIONS ============
+
+// GET /notifications - Notification center
+app.get('/notifications', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  // Get notifications
+  const notifications = await c.env.DB.prepare(`
+    SELECT pn.*, ca.child_name
+    FROM parent_notifications pn
+    LEFT JOIN child_accounts ca ON pn.child_id = ca.child_id AND ca.parent_id = pn.parent_id
+    WHERE pn.parent_id = ?
+    ORDER BY pn.created_at DESC
+    LIMIT 50
+  `).bind(user.id).all();
+
+  const unreadCount = await c.env.DB.prepare(`
+    SELECT COUNT(*) as count FROM parent_notifications 
+    WHERE parent_id = ? AND read_at IS NULL
+  `).bind(user.id).first();
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notifications - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 2rem; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+    .back { color: #888; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .back:hover { color: #fff; }
+    .badge { background: #ef4444; color: white; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; }
+    .notification { background: #1a1a1a; border-radius: 8px; padding: 1rem; margin-bottom: 0.5rem; border-left: 4px solid #333; }
+    .notification.unread { border-left-color: #667eea; background: #1f1f2e; }
+    .notification-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
+    .notification-title { font-weight: 600; }
+    .notification-time { color: #666; font-size: 0.85rem; }
+    .notification-message { color: #aaa; font-size: 0.9rem; }
+    .notification-child { color: #667eea; font-size: 0.85rem; margin-top: 0.5rem; }
+    .btn { background: #667eea; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; border: none; cursor: pointer; }
+    .btn-secondary { background: #333; }
+    .empty { text-align: center; padding: 3rem; color: #666; }
+    .type-icon { margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/dashboard" class="back">← Back to Dashboard</a>
+    
+    <div class="header">
+      <h1>🔔 Notifications ${(unreadCount?.count || 0) > 0 ? `<span class="badge">${unreadCount?.count}</span>` : ''}</h1>
+      <div>
+        <a href="/notifications/settings" class="btn btn-secondary">⚙️ Settings</a>
+        ${(unreadCount?.count || 0) > 0 ? `<form method="POST" action="/notifications/mark-all-read" style="display:inline;"><button type="submit" class="btn">Mark all read</button></form>` : ''}
+      </div>
+    </div>
+    
+    ${notifications.results?.length ? notifications.results.map((n: any) => `
+      <div class="notification ${!n.read_at ? 'unread' : ''}" data-id="${n.id}">
+        <div class="notification-header">
+          <span class="notification-title">
+            <span class="type-icon">${getNotificationIcon(n.notification_type)}</span>
+            ${n.title}
+          </span>
+          <span class="notification-time">${formatTimeAgo(n.created_at)}</span>
+        </div>
+        <div class="notification-message">${n.message}</div>
+        ${n.child_name ? `<div class="notification-child">👧 ${n.child_name}</div>` : ''}
+      </div>
+    `).join('') : '<div class="empty">No notifications yet. Family activity will appear here.</div>'}
+  </div>
+  
+  <script>
+    // Mark as read on click
+    document.querySelectorAll('.notification.unread').forEach(el => {
+      el.addEventListener('click', async () => {
+        const id = el.dataset.id;
+        await fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+        el.classList.remove('unread');
+      });
+    });
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// Helper functions for notifications
+function getNotificationIcon(type: string): string {
+  const icons: Record<string, string> = {
+    login: '👋',
+    time_limit: '⏰',
+    content_flag: '🚩',
+    approval_request: '✋',
+    daily_summary: '📊',
+    weekly_summary: '📈',
+  };
+  return icons[type] || '🔔';
+}
+
+function formatTimeAgo(date: string): string {
+  const now = new Date();
+  const then = new Date(date);
+  const diffMs = now.getTime() - then.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return then.toLocaleDateString();
+}
+
+// POST /notifications/mark-all-read
+app.post('/notifications/mark-all-read', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  await c.env.DB.prepare(`
+    UPDATE parent_notifications SET read_at = datetime('now')
+    WHERE parent_id = ? AND read_at IS NULL
+  `).bind(user.id).run();
+
+  return c.redirect('/notifications');
+});
+
+// POST /api/notifications/:id/read
+app.post('/api/notifications/:id/read', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const id = c.req.param('id');
+  await c.env.DB.prepare(`
+    UPDATE parent_notifications SET read_at = datetime('now')
+    WHERE id = ? AND parent_id = ?
+  `).bind(id, user.id).run();
+
+  return c.json({ success: true });
+});
+
+// GET /api/notifications/count
+app.get('/api/notifications/count', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ count: 0 });
+
+  const result = await c.env.DB.prepare(`
+    SELECT COUNT(*) as count FROM parent_notifications 
+    WHERE parent_id = ? AND read_at IS NULL
+  `).bind(user.id).first();
+
+  return c.json({ count: result?.count || 0 });
+});
+
+// GET /notifications/settings
+app.get('/notifications/settings', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  // Get or create notification preferences
+  let prefs = await c.env.DB.prepare(`
+    SELECT * FROM notification_preferences WHERE user_id = ?
+  `).bind(user.id).first();
+
+  if (!prefs) {
+    // Create default preferences
+    await c.env.DB.prepare(`
+      INSERT INTO notification_preferences (user_id, created_at, updated_at)
+      VALUES (?, datetime('now'), datetime('now'))
+    `).bind(user.id).run();
+    prefs = {
+      email_notifications: 1,
+      push_notifications: 0,
+      in_app_notifications: 1,
+      instant_alerts: 1,
+      batch_login_alerts: 1,
+      daily_summary_time: '20:00',
+      weekly_summary_day: 'sunday',
+      alert_on_time_limit: 1,
+      alert_on_content_flag: 1,
+      alert_on_approval_request: 1,
+      alert_on_unusual_activity: 1,
+      quiet_hours_enabled: 0,
+      quiet_hours_start: '22:00',
+      quiet_hours_end: '07:00',
+    };
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notification Settings - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; }
+    .container { max-width: 600px; margin: 0 auto; padding: 2rem; }
+    .back { color: #888; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .back:hover { color: #fff; }
+    h1 { margin-bottom: 2rem; }
+    .card { background: #1a1a1a; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+    .card h3 { margin-bottom: 1rem; color: #667eea; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .form-group label span { flex: 1; }
+    .toggle { position: relative; width: 50px; height: 26px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #333; border-radius: 26px; cursor: pointer; transition: 0.3s; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+    .toggle input:checked + .slider { background: #667eea; }
+    .toggle input:checked + .slider:before { transform: translateX(24px); }
+    select, input[type="time"] { background: #333; color: white; border: none; padding: 0.5rem; border-radius: 4px; }
+    .btn { background: #667eea; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; border: none; cursor: pointer; width: 100%; font-size: 1rem; }
+    .btn:hover { background: #5567d5; }
+    .description { color: #666; font-size: 0.85rem; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/notifications" class="back">← Back to Notifications</a>
+    <h1>⚙️ Notification Settings</h1>
+    
+    <form method="POST" action="/notifications/settings">
+      <div class="card">
+        <h3>📬 Delivery Methods</h3>
+        
+        <div class="form-group">
+          <label>
+            <span>Email notifications</span>
+            <label class="toggle">
+              <input type="checkbox" name="email_notifications" ${prefs.email_notifications ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">Receive important alerts via email</p>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <span>In-app notifications</span>
+            <label class="toggle">
+              <input type="checkbox" name="in_app_notifications" ${prefs.in_app_notifications ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">See notifications when logged in</p>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>🚨 Alert Types</h3>
+        
+        <div class="form-group">
+          <label>
+            <span>Time limit alerts</span>
+            <label class="toggle">
+              <input type="checkbox" name="alert_on_time_limit" ${prefs.alert_on_time_limit ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">When your child reaches their daily time limit</p>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <span>Content flag alerts</span>
+            <label class="toggle">
+              <input type="checkbox" name="alert_on_content_flag" ${prefs.alert_on_content_flag ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">When content is blocked by your filters</p>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <span>Approval request alerts</span>
+            <label class="toggle">
+              <input type="checkbox" name="alert_on_approval_request" ${prefs.alert_on_approval_request ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">When your child requests permission</p>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <span>Batch login alerts</span>
+            <label class="toggle">
+              <input type="checkbox" name="batch_login_alerts" ${prefs.batch_login_alerts ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">Group login notifications into a daily summary (instead of instant)</p>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>🌙 Quiet Hours</h3>
+        
+        <div class="form-group">
+          <label>
+            <span>Enable quiet hours</span>
+            <label class="toggle">
+              <input type="checkbox" name="quiet_hours_enabled" ${prefs.quiet_hours_enabled ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+          <p class="description">Don't send notifications during set hours</p>
+        </div>
+        
+        <div class="form-group" style="display: flex; gap: 1rem; margin-top: 1rem;">
+          <div style="flex: 1;">
+            <label>From</label>
+            <input type="time" name="quiet_hours_start" value="${prefs.quiet_hours_start || '22:00'}" style="width: 100%;">
+          </div>
+          <div style="flex: 1;">
+            <label>Until</label>
+            <input type="time" name="quiet_hours_end" value="${prefs.quiet_hours_end || '07:00'}" style="width: 100%;">
+          </div>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>📊 Summaries</h3>
+        
+        <div class="form-group">
+          <label>Daily summary time</label>
+          <input type="time" name="daily_summary_time" value="${prefs.daily_summary_time || '20:00'}" style="width: 100%; margin-top: 0.5rem;">
+        </div>
+        
+        <div class="form-group">
+          <label>Weekly summary day</label>
+          <select name="weekly_summary_day" style="width: 100%; margin-top: 0.5rem;">
+            <option value="sunday" ${prefs.weekly_summary_day === 'sunday' ? 'selected' : ''}>Sunday</option>
+            <option value="monday" ${prefs.weekly_summary_day === 'monday' ? 'selected' : ''}>Monday</option>
+            <option value="saturday" ${prefs.weekly_summary_day === 'saturday' ? 'selected' : ''}>Saturday</option>
+          </select>
+        </div>
+      </div>
+      
+      <button type="submit" class="btn">Save Settings</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /notifications/settings
+app.post('/notifications/settings', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const form = await c.req.formData();
+
+  await c.env.DB.prepare(`
+    INSERT INTO notification_preferences (
+      user_id, email_notifications, in_app_notifications, alert_on_time_limit,
+      alert_on_content_flag, alert_on_approval_request, batch_login_alerts,
+      quiet_hours_enabled, quiet_hours_start, quiet_hours_end,
+      daily_summary_time, weekly_summary_day, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET
+      email_notifications = ?, in_app_notifications = ?, alert_on_time_limit = ?,
+      alert_on_content_flag = ?, alert_on_approval_request = ?, batch_login_alerts = ?,
+      quiet_hours_enabled = ?, quiet_hours_start = ?, quiet_hours_end = ?,
+      daily_summary_time = ?, weekly_summary_day = ?, updated_at = datetime('now')
+  `).bind(
+    user.id,
+    form.has('email_notifications') ? 1 : 0,
+    form.has('in_app_notifications') ? 1 : 0,
+    form.has('alert_on_time_limit') ? 1 : 0,
+    form.has('alert_on_content_flag') ? 1 : 0,
+    form.has('alert_on_approval_request') ? 1 : 0,
+    form.has('batch_login_alerts') ? 1 : 0,
+    form.has('quiet_hours_enabled') ? 1 : 0,
+    form.get('quiet_hours_start') || '22:00',
+    form.get('quiet_hours_end') || '07:00',
+    form.get('daily_summary_time') || '20:00',
+    form.get('weekly_summary_day') || 'sunday',
+    // Repeated for ON CONFLICT
+    form.has('email_notifications') ? 1 : 0,
+    form.has('in_app_notifications') ? 1 : 0,
+    form.has('alert_on_time_limit') ? 1 : 0,
+    form.has('alert_on_content_flag') ? 1 : 0,
+    form.has('alert_on_approval_request') ? 1 : 0,
+    form.has('batch_login_alerts') ? 1 : 0,
+    form.has('quiet_hours_enabled') ? 1 : 0,
+    form.get('quiet_hours_start') || '22:00',
+    form.get('quiet_hours_end') || '07:00',
+    form.get('daily_summary_time') || '20:00',
+    form.get('weekly_summary_day') || 'sunday'
+  ).run();
+
+  return c.redirect('/notifications/settings?saved=1');
+});
+
 export default app;
