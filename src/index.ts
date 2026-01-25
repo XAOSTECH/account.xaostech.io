@@ -110,9 +110,13 @@ app.get('/', async (c) => {
     '<p>Access your XAOSTECH dashboard, manage API keys, and more.</p>' +
     '<a href="/api/auth/github/login" class="btn github-btn">' +
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>' +
-    'Sign in with GitHub</a></div>';
+    'Sign in with GitHub</a>' +
+    '<div class="divider"><span>or</span></div>' +
+    '<a href="/login" class="btn secondary">Sign in with Email</a>' +
+    '<p class="register-link">Don\'t have an account? <a href="/register">Create one</a></p>' +
+    '</div>';
 
-  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XAOSTECH Account</title><link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png"><style>:root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; } .container { max-width: 500px; width: 100%; text-align: center; } h1 { color: var(--primary); margin-bottom: 2rem; font-size: 2rem; } .user-card { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 2rem; border-radius: 12px; margin-bottom: 1rem; } .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--primary); } .user-info { text-align: left; } .user-info h2 { margin-bottom: 0.25rem; display: flex; align-items: center; flex-wrap: wrap; } .user-info p { opacity: 0.7; font-size: 0.9rem; } .welcome-banner { background: linear-gradient(135deg, #1a3a1a, #0a2a0a); border: 1px solid #2a5a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; text-align: left; } .welcome-banner a { color: var(--primary); } .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; } .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; font-size: 1rem; } .btn:hover { opacity: 0.9; } .btn.secondary { background: transparent; border: 2px solid var(--primary); color: var(--primary); } .btn.github-btn { background: #24292e; color: #fff; padding: 1rem 2rem; font-size: 1.1rem; } .btn.github-btn:hover { background: #2f363d; } .login-section { background: var(--card-bg); padding: 3rem 2rem; border-radius: 12px; } .login-section h2 { margin-bottom: 0.5rem; } .login-section p { opacity: 0.7; margin-bottom: 2rem; } footer { margin-top: 3rem; opacity: 0.5; font-size: 0.85rem; } footer a { color: var(--primary); }</style></head><body><div class="container"><h1>🔐 XAOSTECH Account</h1>' + userSection + '</div><footer><a href="https://xaostech.io">← Back to XAOSTECH</a></footer></body></html>';
+  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XAOSTECH Account</title><link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png"><style>:root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; } .container { max-width: 500px; width: 100%; text-align: center; } h1 { color: var(--primary); margin-bottom: 2rem; font-size: 2rem; } .user-card { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 2rem; border-radius: 12px; margin-bottom: 1rem; } .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--primary); } .user-info { text-align: left; } .user-info h2 { margin-bottom: 0.25rem; display: flex; align-items: center; flex-wrap: wrap; } .user-info p { opacity: 0.7; font-size: 0.9rem; } .welcome-banner { background: linear-gradient(135deg, #1a3a1a, #0a2a0a); border: 1px solid #2a5a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; text-align: left; } .welcome-banner a { color: var(--primary); } .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; } .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; font-size: 1rem; } .btn:hover { opacity: 0.9; } .btn.secondary { background: transparent; border: 2px solid var(--primary); color: var(--primary); } .btn.github-btn { background: #24292e; color: #fff; padding: 1rem 2rem; font-size: 1.1rem; } .btn.github-btn:hover { background: #2f363d; } .login-section { background: var(--card-bg); padding: 3rem 2rem; border-radius: 12px; } .login-section h2 { margin-bottom: 0.5rem; } .login-section p { opacity: 0.7; margin-bottom: 2rem; } .divider { display: flex; align-items: center; margin: 1.5rem 0; color: #666; } .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #333; } .divider span { padding: 0 1rem; font-size: 0.9rem; } .register-link { margin-top: 1.5rem; font-size: 0.9rem; opacity: 0.7; } .register-link a { color: var(--primary); } footer { margin-top: 3rem; opacity: 0.5; font-size: 0.85rem; } footer a { color: var(--primary); }</style></head><body><div class="container"><h1>🔐 XAOSTECH Account</h1>' + userSection + '</div><footer><a href="https://xaostech.io">← Back to XAOSTECH</a></footer></body></html>';
   return c.html(html);
 });
 
@@ -156,6 +160,411 @@ app.get('/me', async (c) => {
 });
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// ============ EMAIL/PASSWORD LOGIN PAGE ============
+app.get('/login', async (c) => {
+  const error = c.req.query('error') || '';
+  const success = c.req.query('success') || '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - XAOSTECH Account</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --error: #e53935; --success: #43a047; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    .container { max-width: 400px; width: 100%; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; font-size: 1.75rem; text-align: center; }
+    .subtitle { text-align: center; opacity: 0.7; margin-bottom: 2rem; }
+    .form-card { background: var(--card-bg); padding: 2rem; border-radius: 12px; }
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input { width: 100%; padding: 0.75rem 1rem; border: 1px solid #333; border-radius: 6px; background: #0a0a0a; color: #fff; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--primary); }
+    .btn { display: block; width: 100%; background: var(--primary); color: #000; padding: 0.875rem; border-radius: 6px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .error { background: rgba(229,57,53,0.1); border: 1px solid var(--error); color: var(--error); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .success { background: rgba(67,160,71,0.1); border: 1px solid var(--success); color: var(--success); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .links { margin-top: 1.5rem; text-align: center; font-size: 0.9rem; }
+    .links a { color: var(--primary); text-decoration: none; }
+    .divider { display: flex; align-items: center; margin: 1.5rem 0; color: #666; }
+    .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #333; }
+    .divider span { padding: 0 1rem; font-size: 0.9rem; }
+    .github-btn { display: flex; justify-content: center; align-items: center; gap: 0.5rem; background: #24292e; color: #fff; padding: 0.75rem; border-radius: 6px; text-decoration: none; font-weight: 500; }
+    .github-btn:hover { background: #2f363d; }
+    footer { margin-top: 2rem; text-align: center; opacity: 0.5; font-size: 0.85rem; }
+    footer a { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Sign In</h1>
+    <p class="subtitle">Welcome back to XAOSTECH</p>
+    <div class="form-card">
+      ${error ? '<div class="error">' + error + '</div>' : ''}
+      ${success ? '<div class="success">' + success + '</div>' : ''}
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn">Sign In</button>
+      </form>
+      <div class="links">
+        <a href="/forgot-password">Forgot password?</a>
+      </div>
+      <div class="divider"><span>or</span></div>
+      <a href="/api/auth/github/login" class="github-btn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Continue with GitHub
+      </a>
+      <div class="links" style="margin-top:1rem;">
+        Don't have an account? <a href="/register">Sign up</a>
+      </div>
+    </div>
+  </div>
+  <footer><a href="/">← Back to Account</a></footer>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+          credentials: 'include'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = '/';
+        } else {
+          window.location.href = '/login?error=' + encodeURIComponent(data.error || 'Login failed');
+        }
+      } catch (err) {
+        window.location.href = '/login?error=' + encodeURIComponent('Network error');
+      }
+    });
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
+// ============ EMAIL/PASSWORD REGISTER PAGE ============
+app.get('/register', async (c) => {
+  const error = c.req.query('error') || '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Account - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --error: #e53935; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    .container { max-width: 400px; width: 100%; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; font-size: 1.75rem; text-align: center; }
+    .subtitle { text-align: center; opacity: 0.7; margin-bottom: 2rem; }
+    .form-card { background: var(--card-bg); padding: 2rem; border-radius: 12px; }
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input { width: 100%; padding: 0.75rem 1rem; border: 1px solid #333; border-radius: 6px; background: #0a0a0a; color: #fff; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--primary); }
+    .hint { font-size: 0.8rem; opacity: 0.6; margin-top: 0.25rem; }
+    .btn { display: block; width: 100%; background: var(--primary); color: #000; padding: 0.875rem; border-radius: 6px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error { background: rgba(229,57,53,0.1); border: 1px solid var(--error); color: var(--error); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .links { margin-top: 1.5rem; text-align: center; font-size: 0.9rem; }
+    .links a { color: var(--primary); text-decoration: none; }
+    .divider { display: flex; align-items: center; margin: 1.5rem 0; color: #666; }
+    .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #333; }
+    .divider span { padding: 0 1rem; font-size: 0.9rem; }
+    .github-btn { display: flex; justify-content: center; align-items: center; gap: 0.5rem; background: #24292e; color: #fff; padding: 0.75rem; border-radius: 6px; text-decoration: none; font-weight: 500; }
+    .github-btn:hover { background: #2f363d; }
+    footer { margin-top: 2rem; text-align: center; opacity: 0.5; font-size: 0.85rem; }
+    footer a { color: var(--primary); }
+    .success-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 100; }
+    .success-content { background: var(--card-bg); padding: 2rem; border-radius: 12px; max-width: 400px; text-align: center; }
+    .success-content h2 { color: #43a047; margin-bottom: 1rem; }
+    .success-content p { margin-bottom: 1.5rem; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Create Account</h1>
+    <p class="subtitle">Join XAOSTECH to access our platform</p>
+    <div class="form-card">
+      ${error ? '<div class="error">' + error + '</div>' : ''}
+      <form id="registerForm">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" required pattern="^[a-zA-Z0-9_-]+$" minlength="3" maxlength="30">
+          <p class="hint">Letters, numbers, underscores, hyphens only</p>
+        </div>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" required minlength="8">
+          <p class="hint">8+ characters, at least one uppercase letter and number</p>
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm Password</label>
+          <input type="password" id="confirmPassword" name="confirmPassword" required>
+        </div>
+        <button type="submit" class="btn" id="submitBtn">Create Account</button>
+      </form>
+      <div class="divider"><span>or</span></div>
+      <a href="/api/auth/github/login" class="github-btn">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Continue with GitHub
+      </a>
+      <div class="links" style="margin-top:1rem;">
+        Already have an account? <a href="/login">Sign in</a>
+      </div>
+    </div>
+  </div>
+  <footer><a href="/">← Back to Account</a></footer>
+  
+  <div class="success-modal" id="successModal">
+    <div class="success-content">
+      <h2>✅ Check Your Email</h2>
+      <p>We've sent a verification link to your email address. Please click the link to verify your account before logging in.</p>
+      <a href="/login" class="btn" style="display:inline-block;width:auto;padding:0.75rem 2rem;">Go to Login</a>
+    </div>
+  </div>
+  
+  <script>
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      
+      if (password !== confirmPassword) {
+        window.location.href = '/register?error=' + encodeURIComponent('Passwords do not match');
+        return;
+      }
+      
+      if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        window.location.href = '/register?error=' + encodeURIComponent('Password must contain uppercase letter and number');
+        return;
+      }
+      
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+      
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('successModal').style.display = 'flex';
+        } else {
+          window.location.href = '/register?error=' + encodeURIComponent(data.error || 'Registration failed');
+        }
+      } catch (err) {
+        window.location.href = '/register?error=' + encodeURIComponent('Network error');
+      }
+    });
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
+// ============ FORGOT PASSWORD PAGE ============
+app.get('/forgot-password', async (c) => {
+  const message = c.req.query('message') || '';
+  const error = c.req.query('error') || '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Password - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --error: #e53935; --success: #43a047; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    .container { max-width: 400px; width: 100%; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; font-size: 1.75rem; text-align: center; }
+    .subtitle { text-align: center; opacity: 0.7; margin-bottom: 2rem; }
+    .form-card { background: var(--card-bg); padding: 2rem; border-radius: 12px; }
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input { width: 100%; padding: 0.75rem 1rem; border: 1px solid #333; border-radius: 6px; background: #0a0a0a; color: #fff; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--primary); }
+    .btn { display: block; width: 100%; background: var(--primary); color: #000; padding: 0.875rem; border-radius: 6px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .error { background: rgba(229,57,53,0.1); border: 1px solid var(--error); color: var(--error); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .success { background: rgba(67,160,71,0.1); border: 1px solid var(--success); color: var(--success); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .links { margin-top: 1.5rem; text-align: center; font-size: 0.9rem; }
+    .links a { color: var(--primary); text-decoration: none; }
+    footer { margin-top: 2rem; text-align: center; opacity: 0.5; font-size: 0.85rem; }
+    footer a { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔑 Reset Password</h1>
+    <p class="subtitle">Enter your email to receive a reset link</p>
+    <div class="form-card">
+      ${error ? '<div class="error">' + error + '</div>' : ''}
+      ${message ? '<div class="success">' + message + '</div>' : ''}
+      <form id="forgotForm">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <button type="submit" class="btn">Send Reset Link</button>
+      </form>
+      <div class="links">
+        <a href="/login">← Back to login</a>
+      </div>
+    </div>
+  </div>
+  <footer><a href="/">← Back to Account</a></footer>
+  <script>
+    document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      try {
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        window.location.href = '/forgot-password?message=' + encodeURIComponent('If an account exists, a reset link will be sent.');
+      } catch (err) {
+        window.location.href = '/forgot-password?error=' + encodeURIComponent('Network error');
+      }
+    });
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
+
+// ============ RESET PASSWORD PAGE ============
+app.get('/reset-password', async (c) => {
+  const token = c.req.query('token') || '';
+  const error = c.req.query('error') || '';
+
+  if (!token) {
+    return c.redirect('/forgot-password?error=' + encodeURIComponent('Invalid reset link'));
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set New Password - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --error: #e53935; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+    .container { max-width: 400px; width: 100%; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; font-size: 1.75rem; text-align: center; }
+    .subtitle { text-align: center; opacity: 0.7; margin-bottom: 2rem; }
+    .form-card { background: var(--card-bg); padding: 2rem; border-radius: 12px; }
+    .form-group { margin-bottom: 1.25rem; }
+    label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    input { width: 100%; padding: 0.75rem 1rem; border: 1px solid #333; border-radius: 6px; background: #0a0a0a; color: #fff; font-size: 1rem; }
+    input:focus { outline: none; border-color: var(--primary); }
+    .hint { font-size: 0.8rem; opacity: 0.6; margin-top: 0.25rem; }
+    .btn { display: block; width: 100%; background: var(--primary); color: #000; padding: 0.875rem; border-radius: 6px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .error { background: rgba(229,57,53,0.1); border: 1px solid var(--error); color: var(--error); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.9rem; }
+    footer { margin-top: 2rem; text-align: center; opacity: 0.5; font-size: 0.85rem; }
+    footer a { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔐 Set New Password</h1>
+    <p class="subtitle">Enter your new password below</p>
+    <div class="form-card">
+      ${error ? '<div class="error">' + error + '</div>' : ''}
+      <form id="resetForm">
+        <input type="hidden" id="token" value="${token}">
+        <div class="form-group">
+          <label for="password">New Password</label>
+          <input type="password" id="password" name="password" required minlength="8">
+          <p class="hint">8+ characters, at least one uppercase letter and number</p>
+        </div>
+        <div class="form-group">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input type="password" id="confirmPassword" name="confirmPassword" required>
+        </div>
+        <button type="submit" class="btn">Reset Password</button>
+      </form>
+    </div>
+  </div>
+  <footer><a href="/">← Back to Account</a></footer>
+  <script>
+    document.getElementById('resetForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = document.getElementById('token').value;
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      
+      if (password !== confirmPassword) {
+        window.location.href = '/reset-password?token=' + token + '&error=' + encodeURIComponent('Passwords do not match');
+        return;
+      }
+      
+      if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        window.location.href = '/reset-password?token=' + token + '&error=' + encodeURIComponent('Password must contain uppercase letter and number');
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = '/login?success=' + encodeURIComponent('Password reset successfully. You can now log in.');
+        } else {
+          window.location.href = '/reset-password?token=' + token + '&error=' + encodeURIComponent(data.error || 'Reset failed');
+        }
+      } catch (err) {
+        window.location.href = '/reset-password?token=' + token + '&error=' + encodeURIComponent('Network error');
+      }
+    });
+  </script>
+</body>
+</html>`;
+  return c.html(html);
+});
 
 // API proxy: route /api/* to api.xaostech.io with injected credentials
 app.all('/api/*', createApiProxyRoute());
