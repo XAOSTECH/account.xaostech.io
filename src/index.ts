@@ -2814,7 +2814,11 @@ app.get('/family', async (c) => {
     <h1>👨‍👩‍👧‍👦 Family Dashboard</h1>
     <p class="subtitle">Manage your children's accounts and safety settings</p>
     
-    <a href="/family/add-child" class="btn" style="margin-bottom: 2rem;">+ Add Child Account</a>
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 2rem; flex-wrap: wrap;">
+      <a href="/family/add-child" class="btn">+ Add Child Account</a>
+      <a href="/family/billing" class="btn btn-secondary">💳 Family Billing</a>
+      <a href="/notifications" class="btn btn-secondary">🔔 Notifications</a>
+    </div>
     
     ${pendingApprovals.length > 0 ? `
       <h2 class="section-title">⏳ Pending Approvals (${pendingApprovals.length})</h2>
@@ -3383,6 +3387,183 @@ app.get('/family/activity/:id', async (c) => {
         </div>
       `).join('') : '<div class="empty">No activity recorded yet</div>'}
     </div>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// ============ FAMILY BILLING ============
+
+// GET /family/billing - Family billing management
+app.get('/family/billing', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  // Fetch family billing info from payments service
+  let familyData: any = null;
+  try {
+    const response = await fetch(`https://payments.xaostech.io/family/${user.id}`, {
+      headers: { 'X-User-ID': user.id },
+    });
+    if (response.ok) {
+      familyData = await response.json();
+    }
+  } catch {
+    // Fallback to basic display
+  }
+
+  // Get child accounts
+  const children = await c.env.DB.prepare(`
+    SELECT ca.child_id, ca.child_name, u.email
+    FROM child_accounts ca
+    JOIN users u ON ca.child_id = u.id
+    WHERE ca.parent_id = ?
+  `).bind(user.id).all();
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Family Billing - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 2rem; }
+    .back { color: #888; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .back:hover { color: #fff; }
+    h1 { color: #f6821f; margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; border: 1px solid #333; }
+    .card h3 { color: #f6821f; margin-bottom: 1rem; }
+    .plan-badge { display: inline-block; background: #f6821f; color: #000; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.85rem; font-weight: bold; text-transform: uppercase; }
+    .plan-badge.free { background: #666; color: #fff; }
+    .plan-badge.pro { background: #667eea; }
+    .plan-badge.enterprise { background: #10b981; }
+    .stat { display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid #333; }
+    .stat:last-child { border-bottom: none; }
+    .stat-label { color: #888; }
+    .stat-value { font-weight: 600; }
+    .btn { display: inline-block; background: #f6821f; color: #000; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background: #333; color: #fff; }
+    .member-list { list-style: none; }
+    .member-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #333; }
+    .member-item:last-child { border-bottom: none; }
+    .member-info { display: flex; align-items: center; gap: 1rem; }
+    .member-avatar { width: 40px; height: 40px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+    .feature { display: flex; align-items: center; gap: 0.5rem; color: #43a047; }
+    .feature::before { content: "✓"; }
+    .upgrade-banner { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; text-align: center; }
+    .upgrade-banner h3 { color: #fff; margin-bottom: 0.5rem; }
+    .upgrade-banner p { color: rgba(255,255,255,0.8); margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/family" class="back">← Back to Family Dashboard</a>
+    <h1>💳 Family Billing</h1>
+    <p class="subtitle">Manage your family subscription and see who's covered</p>
+    
+    ${familyData?.plan === 'free' || !familyData ? `
+      <div class="upgrade-banner">
+        <h3>Upgrade to Pro for Family Features</h3>
+        <p>Get unlimited projects, 50GB storage, and add up to 5 family members!</p>
+        <a href="https://payments.xaostech.io/checkout?plan=pro" class="btn">Upgrade to Pro - $12/month</a>
+      </div>
+    ` : ''}
+    
+    <div class="card">
+      <h3>📋 Current Plan</h3>
+      <div class="stat">
+        <span class="stat-label">Plan</span>
+        <span class="plan-badge ${familyData?.plan || 'free'}">${familyData?.plan || 'Free'}</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Status</span>
+        <span class="stat-value">${familyData?.status || 'Active'}</span>
+      </div>
+      ${familyData?.role === 'parent' ? `
+        <div class="stat">
+          <span class="stat-label">Family Members</span>
+          <span class="stat-value">${familyData.members?.length || 0} / ${familyData.max_members || 5}</span>
+        </div>
+      ` : ''}
+      ${familyData?.current_period_end ? `
+        <div class="stat">
+          <span class="stat-label">Renews</span>
+          <span class="stat-value">${new Date(familyData.current_period_end * 1000).toLocaleDateString()}</span>
+        </div>
+      ` : ''}
+      
+      ${familyData?.features ? `
+        <div class="features">
+          ${familyData.features.map((f: string) => `<span class="feature">${f}</span>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+    
+    ${familyData?.plan && familyData.plan !== 'free' ? `
+      <div class="card">
+        <h3>👨‍👩‍👧‍👦 Family Members</h3>
+        <p style="color: #888; margin-bottom: 1rem;">Family members share your subscription benefits at no extra cost.</p>
+        
+        ${children.results?.length ? `
+          <ul class="member-list">
+            ${children.results.map((child: any) => `
+              <li class="member-item">
+                <div class="member-info">
+                  <div class="member-avatar">👧</div>
+                  <div>
+                    <strong>${child.child_name}</strong>
+                    <p style="color: #888; font-size: 0.85rem;">${child.email}</p>
+                  </div>
+                </div>
+                <span style="color: #43a047;">✓ Covered</span>
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<p style="color: #666; text-align: center; padding: 1rem;">No family members yet. Add children from the Family Dashboard.</p>'}
+        
+        <div style="margin-top: 1rem; text-align: center;">
+          <a href="/family/add-child" class="btn btn-secondary">+ Add Child Account</a>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>⚙️ Manage Subscription</h3>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="https://payments.xaostech.io/checkout?plan=enterprise" class="btn btn-secondary">Upgrade Plan</a>
+          <a href="https://billing.stripe.com/p/login" class="btn btn-secondary">Billing Portal</a>
+        </div>
+      </div>
+    ` : `
+      <div class="card">
+        <h3>👨‍👩‍👧‍👦 Your Children</h3>
+        ${children.results?.length ? `
+          <ul class="member-list">
+            ${children.results.map((child: any) => `
+              <li class="member-item">
+                <div class="member-info">
+                  <div class="member-avatar">👧</div>
+                  <div>
+                    <strong>${child.child_name}</strong>
+                    <p style="color: #888; font-size: 0.85rem;">${child.email}</p>
+                  </div>
+                </div>
+                <span style="color: #ffa726;">Free tier</span>
+              </li>
+            `).join('')}
+          </ul>
+          <p style="color: #888; margin-top: 1rem; font-size: 0.9rem;">
+            Upgrade to Pro to give your children access to premium features!
+          </p>
+        ` : '<p style="color: #666; text-align: center; padding: 1rem;">No children added yet.</p>'}
+      </div>
+    `}
   </div>
 </body>
 </html>`;
