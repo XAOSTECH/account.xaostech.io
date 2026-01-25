@@ -2724,10 +2724,10 @@ async function getSessionUser(c: any): Promise<any | null> {
   const cookie = c.req.header('Cookie') || '';
   const match = cookie.match(/session_id=([^;]+)/);
   if (!match) return null;
-  
+
   const sessionData = await c.env.SESSIONS_KV.get(match[1]);
   if (!sessionData) return null;
-  
+
   const user = JSON.parse(sessionData);
   if (user.expires && user.expires < Date.now()) return null;
   return user;
@@ -2928,7 +2928,7 @@ app.get('/family/add-child', async (c) => {
           <label for="birth_year">Birth Year (optional)</label>
           <select id="birth_year" name="birth_year">
             <option value="">-- Select --</option>
-            ${Array.from({length: 18}, (_, i) => new Date().getFullYear() - 4 - i).map(y => `<option value="${y}">${y}</option>`).join('')}
+            ${Array.from({ length: 18 }, (_, i) => new Date().getFullYear() - 4 - i).map(y => `<option value="${y}">${y}</option>`).join('')}
           </select>
           <small>Helps us show age-appropriate content</small>
         </div>
