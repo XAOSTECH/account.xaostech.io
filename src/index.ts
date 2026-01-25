@@ -100,6 +100,7 @@ app.get('/', async (c) => {
     (user.isNewUser ? '<div class="welcome-banner"><strong>🎉 Welcome to XAOSTECH!</strong> Visit <a href="/service-accounts">API Keys</a> to get your access token.</div>' : '') +
     '<div class="actions">' +
     '<a href="/profile" class="btn">Edit Profile</a>' +
+    '<a href="/family" class="btn secondary">👨‍👩‍👧 Family</a>' +
     '<a href="/service-accounts" class="btn secondary">API Keys</a>' +
     (user.role === 'owner' ? '<a href="/admin" class="btn secondary" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">👑 Admin</a>' : '') +
     '<form action="/logout" method="POST" style="display:inline">' +
@@ -2714,6 +2715,679 @@ app.post('/verify-api-key', async (c) => {
     console.error('API key verification error:', err);
     return c.json({ valid: false, error: 'Verification failed' }, 500);
   }
+});
+
+// ============ CHILD ACCOUNTS (Parental Controls) ============
+
+// Helper to get session user
+async function getSessionUser(c: any): Promise<any | null> {
+  const cookie = c.req.header('Cookie') || '';
+  const match = cookie.match(/session_id=([^;]+)/);
+  if (!match) return null;
+  
+  const sessionData = await c.env.SESSIONS_KV.get(match[1]);
+  if (!sessionData) return null;
+  
+  const user = JSON.parse(sessionData);
+  if (user.expires && user.expires < Date.now()) return null;
+  return user;
+}
+
+// GET /family - Family dashboard (parent view)
+app.get('/family', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  // Get children linked to this parent
+  let children: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT ca.*, u.email as child_email, u.avatar_url as child_avatar,
+             pc.content_filter_level, pc.daily_time_limit, pc.can_post_content
+      FROM child_accounts ca
+      JOIN users u ON ca.child_id = u.id
+      LEFT JOIN parental_controls pc ON ca.child_id = pc.child_id
+      WHERE ca.parent_id = ?
+      ORDER BY ca.created_at DESC
+    `).bind(user.id).all();
+    children = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch children:', err);
+  }
+
+  // Get pending approvals
+  let pendingApprovals: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT pa.*, ca.child_name
+      FROM parent_approvals pa
+      JOIN child_accounts ca ON pa.child_id = ca.child_id
+      WHERE pa.parent_id = ? AND pa.status = 'pending'
+      ORDER BY pa.created_at DESC
+      LIMIT 20
+    `).bind(user.id).all();
+    pendingApprovals = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch approvals:', err);
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Family Dashboard - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; --success: #43a047; --warning: #ffa726; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    .child-card { display: flex; align-items: center; gap: 1rem; }
+    .child-avatar { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--primary); }
+    .child-info { flex: 1; }
+    .child-info h3 { margin-bottom: 0.25rem; }
+    .child-info p { color: #888; font-size: 0.9rem; }
+    .child-controls { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; }
+    .badge-strict { background: #e53935; color: #fff; }
+    .badge-moderate { background: #ffa726; color: #000; }
+    .badge-minimal { background: #43a047; color: #fff; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: bold; font-size: 0.9rem; border: none; cursor: pointer; text-decoration: none; transition: transform 0.2s; }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-small { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+    .approval-item { display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid var(--border); }
+    .approval-item:last-child { border-bottom: none; }
+    .approval-actions { display: flex; gap: 0.5rem; }
+    .empty { text-align: center; padding: 3rem; color: #666; }
+    .section-title { margin: 2rem 0 1rem; color: #888; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back">← Back to Account</a>
+    <h1>👨‍👩‍👧‍👦 Family Dashboard</h1>
+    <p class="subtitle">Manage your children's accounts and safety settings</p>
+    
+    <a href="/family/add-child" class="btn" style="margin-bottom: 2rem;">+ Add Child Account</a>
+    
+    ${pendingApprovals.length > 0 ? `
+      <h2 class="section-title">⏳ Pending Approvals (${pendingApprovals.length})</h2>
+      <div class="card">
+        ${pendingApprovals.map((a: any) => `
+          <div class="approval-item">
+            <div>
+              <strong>${a.child_name}</strong> wants to ${a.approval_type.replace(/_/g, ' ')}
+              <p style="color: #888; font-size: 0.85rem; margin-top: 0.25rem;">${new Date(a.created_at).toLocaleString()}</p>
+            </div>
+            <div class="approval-actions">
+              <form method="POST" action="/family/approve/${a.id}" style="display:inline;">
+                <button type="submit" class="btn btn-small">✓ Approve</button>
+              </form>
+              <form method="POST" action="/family/deny/${a.id}" style="display:inline;">
+                <button type="submit" class="btn btn-small btn-secondary">✗ Deny</button>
+              </form>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+    
+    <h2 class="section-title">👧 Children (${children.length})</h2>
+    ${children.length > 0 ? children.map((child: any) => `
+      <div class="card child-card">
+        <img src="${child.child_avatar || '/api/data/assets/XAOSTECH_LOGO.png'}" alt="${child.child_name}" class="child-avatar">
+        <div class="child-info">
+          <h3>${child.child_name}</h3>
+          <p>${child.child_email || 'No email'} ${child.birth_year ? `• Born ${child.birth_year}` : ''}</p>
+          <div class="child-controls">
+            <span class="badge badge-${child.content_filter_level || 'strict'}">${(child.content_filter_level || 'strict').toUpperCase()} filter</span>
+            <span class="badge" style="background:#333;">${child.daily_time_limit || 60} min/day</span>
+            ${child.can_post_content ? '<span class="badge" style="background:#43a047;color:#fff;">Can post</span>' : ''}
+          </div>
+        </div>
+        <div>
+          <a href="/family/child/${child.child_id}" class="btn btn-secondary btn-small">⚙️ Settings</a>
+          <a href="/family/activity/${child.child_id}" class="btn btn-secondary btn-small">📊 Activity</a>
+        </div>
+      </div>
+    `).join('') : '<div class="card empty">No children added yet. Click "Add Child Account" to get started.</div>'}
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// GET /family/add-child - Add child form
+app.get('/family/add-child', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Child Account - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; }
+    .form-group { margin-bottom: 1.5rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    .form-group input, .form-group select { width: 100%; padding: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+    .form-group small { display: block; margin-top: 0.5rem; color: #666; font-size: 0.85rem; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 8px; font-weight: bold; font-size: 1rem; border: none; cursor: pointer; text-decoration: none; }
+    .btn:hover { opacity: 0.9; }
+    .info-box { background: rgba(246, 130, 31, 0.1); border: 1px solid var(--primary); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/family" class="back">← Back to Family Dashboard</a>
+    <h1>👧 Add Child Account</h1>
+    <p class="subtitle">Create a safe, supervised account for your child</p>
+    
+    <div class="card">
+      <div class="info-box">
+        🔒 Child accounts have restricted access and activity monitoring. You'll be able to approve their actions and set time limits.
+      </div>
+      
+      <form method="POST" action="/family/add-child">
+        <div class="form-group">
+          <label for="child_name">Child's Name</label>
+          <input type="text" id="child_name" name="child_name" required placeholder="How should we call them?">
+        </div>
+        
+        <div class="form-group">
+          <label for="child_username">Username</label>
+          <input type="text" id="child_username" name="child_username" required placeholder="Choose a unique username" pattern="[a-zA-Z0-9_-]+" minlength="3">
+          <small>Letters, numbers, underscores and dashes only</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="child_password">Password</label>
+          <input type="password" id="child_password" name="child_password" required minlength="6" placeholder="At least 6 characters">
+          <small>This is what your child will use to log in</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="birth_year">Birth Year (optional)</label>
+          <select id="birth_year" name="birth_year">
+            <option value="">-- Select --</option>
+            ${Array.from({length: 18}, (_, i) => new Date().getFullYear() - 4 - i).map(y => `<option value="${y}">${y}</option>`).join('')}
+          </select>
+          <small>Helps us show age-appropriate content</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="filter_level">Content Filter Level</label>
+          <select id="filter_level" name="filter_level">
+            <option value="strict">Strict (recommended for under 10)</option>
+            <option value="moderate">Moderate (10-13 years)</option>
+            <option value="minimal">Minimal (13+ years)</option>
+          </select>
+        </div>
+        
+        <button type="submit" class="btn">Create Child Account</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /family/add-child - Create child account
+app.post('/family/add-child', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const formData = await c.req.formData();
+  const childName = formData.get('child_name')?.toString().trim();
+  const childUsername = formData.get('child_username')?.toString().trim().toLowerCase();
+  const childPassword = formData.get('child_password')?.toString();
+  const birthYear = formData.get('birth_year')?.toString() || null;
+  const filterLevel = formData.get('filter_level')?.toString() || 'strict';
+
+  if (!childName || !childUsername || !childPassword) {
+    return c.redirect('/family/add-child?error=missing_fields');
+  }
+
+  try {
+    // Hash password
+    const encoder = new TextEncoder();
+    const data = encoder.encode(childPassword);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    // Create child user
+    const childId = crypto.randomUUID();
+    await c.env.DB.prepare(`
+      INSERT INTO users (id, username, password_hash, role, created_at, updated_at)
+      VALUES (?, ?, ?, 'child', datetime('now'), datetime('now'))
+    `).bind(childId, childUsername, passwordHash).run();
+
+    // Link to parent
+    await c.env.DB.prepare(`
+      INSERT INTO child_accounts (parent_id, child_id, child_name, birth_year)
+      VALUES (?, ?, ?, ?)
+    `).bind(user.id, childId, childName, birthYear).run();
+
+    // Create parental controls with defaults
+    await c.env.DB.prepare(`
+      INSERT INTO parental_controls (child_id, content_filter_level)
+      VALUES (?, ?)
+    `).bind(childId, filterLevel).run();
+
+    return c.redirect('/family?success=child_created');
+  } catch (err: any) {
+    console.error('Failed to create child account:', err);
+    if (err.message?.includes('UNIQUE')) {
+      return c.redirect('/family/add-child?error=username_taken');
+    }
+    return c.redirect('/family/add-child?error=creation_failed');
+  }
+});
+
+// GET /family/child/:id - Child settings page
+app.get('/family/child/:id', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const childId = c.req.param('id');
+
+  // Verify parent owns this child
+  const child = await c.env.DB.prepare(`
+    SELECT ca.*, u.username as child_username, u.avatar_url as child_avatar,
+           pc.*
+    FROM child_accounts ca
+    JOIN users u ON ca.child_id = u.id
+    LEFT JOIN parental_controls pc ON ca.child_id = pc.child_id
+    WHERE ca.parent_id = ? AND ca.child_id = ?
+  `).bind(user.id, childId).first();
+
+  if (!child) return c.redirect('/family?error=not_found');
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${child.child_name} Settings - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    .card h3 { margin-bottom: 1rem; color: var(--primary); }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .form-group input[type="text"], .form-group input[type="number"], .form-group select { width: 100%; padding: 0.6rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); }
+    .toggle { position: relative; width: 50px; height: 26px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: #333; border-radius: 26px; transition: 0.3s; }
+    .toggle .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background: #666; border-radius: 50%; transition: 0.3s; }
+    .toggle input:checked + .slider { background: var(--primary); }
+    .toggle input:checked + .slider:before { transform: translateX(24px); background: #fff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.6rem 1.2rem; border-radius: 8px; font-weight: bold; font-size: 0.9rem; border: none; cursor: pointer; text-decoration: none; }
+    .btn:hover { opacity: 0.9; }
+    .btn-danger { background: #e53935; color: #fff; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/family" class="back">← Back to Family Dashboard</a>
+    <h1>⚙️ ${child.child_name}'s Settings</h1>
+    <p class="subtitle">@${child.child_username}</p>
+    
+    <form method="POST" action="/family/child/${childId}">
+      <div class="card">
+        <h3>🔒 Content & Safety</h3>
+        
+        <div class="form-group">
+          <label for="filter_level">Content Filter Level</label>
+          <select id="filter_level" name="filter_level">
+            <option value="strict" ${child.content_filter_level === 'strict' ? 'selected' : ''}>Strict</option>
+            <option value="moderate" ${child.content_filter_level === 'moderate' ? 'selected' : ''}>Moderate</option>
+            <option value="minimal" ${child.content_filter_level === 'minimal' ? 'selected' : ''}>Minimal</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>⏰ Time Limits</h3>
+        
+        <div class="form-group">
+          <label for="daily_limit">Daily Time Limit (minutes)</label>
+          <input type="number" id="daily_limit" name="daily_limit" value="${child.daily_time_limit || 60}" min="0" max="1440">
+        </div>
+        
+        <div class="form-group">
+          <label for="weekly_limit">Weekly Time Limit (minutes)</label>
+          <input type="number" id="weekly_limit" name="weekly_limit" value="${child.weekly_time_limit || 420}" min="0" max="10080">
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>✅ Permissions</h3>
+        
+        <div class="form-group">
+          <label>
+            Can post content (comments, etc.)
+            <label class="toggle">
+              <input type="checkbox" name="can_post" ${child.can_post_content ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            Can send messages
+            <label class="toggle">
+              <input type="checkbox" name="can_message" ${child.can_message ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            Require approval for actions
+            <label class="toggle">
+              <input type="checkbox" name="require_approval" ${child.require_approval ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>🔔 Notifications</h3>
+        
+        <div class="form-group">
+          <label>
+            Notify on login
+            <label class="toggle">
+              <input type="checkbox" name="notify_login" ${child.notify_parent_on_login ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label>
+            Weekly activity report
+            <label class="toggle">
+              <input type="checkbox" name="weekly_report" ${child.weekly_activity_report ? 'checked' : ''}>
+              <span class="slider"></span>
+            </label>
+          </label>
+        </div>
+      </div>
+      
+      <button type="submit" class="btn" style="width:100%; margin-bottom: 1rem;">Save Settings</button>
+    </form>
+    
+    <form method="POST" action="/family/child/${childId}/remove" onsubmit="return confirm('Are you sure? This will delete the child account permanently.');">
+      <button type="submit" class="btn btn-danger" style="width:100%;">🗑️ Remove Child Account</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /family/child/:id - Update child settings
+app.post('/family/child/:id', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const childId = c.req.param('id');
+  const formData = await c.req.formData();
+
+  // Verify parent owns this child
+  const ownership = await c.env.DB.prepare(`
+    SELECT 1 FROM child_accounts WHERE parent_id = ? AND child_id = ?
+  `).bind(user.id, childId).first();
+
+  if (!ownership) return c.redirect('/family?error=not_found');
+
+  try {
+    await c.env.DB.prepare(`
+      UPDATE parental_controls SET
+        content_filter_level = ?,
+        daily_time_limit = ?,
+        weekly_time_limit = ?,
+        can_post_content = ?,
+        can_message = ?,
+        require_approval = ?,
+        notify_parent_on_login = ?,
+        weekly_activity_report = ?,
+        updated_at = datetime('now')
+      WHERE child_id = ?
+    `).bind(
+      formData.get('filter_level') || 'strict',
+      parseInt(formData.get('daily_limit')?.toString() || '60'),
+      parseInt(formData.get('weekly_limit')?.toString() || '420'),
+      formData.has('can_post') ? 1 : 0,
+      formData.has('can_message') ? 1 : 0,
+      formData.has('require_approval') ? 1 : 0,
+      formData.has('notify_login') ? 1 : 0,
+      formData.has('weekly_report') ? 1 : 0,
+      childId
+    ).run();
+
+    return c.redirect(`/family/child/${childId}?success=saved`);
+  } catch (err) {
+    console.error('Failed to update child settings:', err);
+    return c.redirect(`/family/child/${childId}?error=save_failed`);
+  }
+});
+
+// POST /family/child/:id/remove - Remove child account
+app.post('/family/child/:id/remove', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const childId = c.req.param('id');
+
+  // Verify and delete
+  try {
+    const ownership = await c.env.DB.prepare(`
+      SELECT 1 FROM child_accounts WHERE parent_id = ? AND child_id = ?
+    `).bind(user.id, childId).first();
+
+    if (!ownership) return c.redirect('/family?error=not_found');
+
+    // Delete in order (foreign keys)
+    await c.env.DB.prepare('DELETE FROM child_time_tracking WHERE child_id = ?').bind(childId).run();
+    await c.env.DB.prepare('DELETE FROM parent_approvals WHERE child_id = ?').bind(childId).run();
+    await c.env.DB.prepare('DELETE FROM child_activity WHERE child_id = ?').bind(childId).run();
+    await c.env.DB.prepare('DELETE FROM parental_controls WHERE child_id = ?').bind(childId).run();
+    await c.env.DB.prepare('DELETE FROM child_accounts WHERE child_id = ?').bind(childId).run();
+    await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(childId).run();
+
+    return c.redirect('/family?success=child_removed');
+  } catch (err) {
+    console.error('Failed to remove child:', err);
+    return c.redirect('/family?error=remove_failed');
+  }
+});
+
+// POST /family/approve/:id - Approve a pending request
+app.post('/family/approve/:id', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const approvalId = c.req.param('id');
+
+  try {
+    await c.env.DB.prepare(`
+      UPDATE parent_approvals 
+      SET status = 'approved', resolved_at = datetime('now')
+      WHERE id = ? AND parent_id = ?
+    `).bind(approvalId, user.id).run();
+
+    return c.redirect('/family');
+  } catch (err) {
+    console.error('Failed to approve:', err);
+    return c.redirect('/family?error=approve_failed');
+  }
+});
+
+// POST /family/deny/:id - Deny a pending request
+app.post('/family/deny/:id', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const approvalId = c.req.param('id');
+
+  try {
+    await c.env.DB.prepare(`
+      UPDATE parent_approvals 
+      SET status = 'denied', resolved_at = datetime('now')
+      WHERE id = ? AND parent_id = ?
+    `).bind(approvalId, user.id).run();
+
+    return c.redirect('/family');
+  } catch (err) {
+    console.error('Failed to deny:', err);
+    return c.redirect('/family?error=deny_failed');
+  }
+});
+
+// GET /family/activity/:id - Child activity log
+app.get('/family/activity/:id', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  const childId = c.req.param('id');
+
+  // Verify parent owns this child
+  const child = await c.env.DB.prepare(`
+    SELECT ca.child_name FROM child_accounts ca
+    WHERE ca.parent_id = ? AND ca.child_id = ?
+  `).bind(user.id, childId).first();
+
+  if (!child) return c.redirect('/family?error=not_found');
+
+  // Get recent activity
+  let activities: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT * FROM child_activity 
+      WHERE child_id = ?
+      ORDER BY created_at DESC
+      LIMIT 100
+    `).bind(childId).all();
+    activities = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch activity:', err);
+  }
+
+  // Get time tracking for this week
+  let timeTracking: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(`
+      SELECT * FROM child_time_tracking 
+      WHERE child_id = ? AND date >= date('now', '-7 days')
+      ORDER BY date DESC
+    `).bind(childId).all();
+    timeTracking = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch time tracking:', err);
+  }
+
+  const totalMinutes = timeTracking.reduce((sum: number, t: any) => sum + (t.minutes_used || 0), 0);
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${child.child_name}'s Activity - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .stat { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; text-align: center; }
+    .stat h2 { font-size: 2rem; color: var(--primary); }
+    .stat p { color: #888; margin-top: 0.25rem; font-size: 0.9rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    .activity-item { padding: 0.75rem 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-type { font-weight: 500; }
+    .activity-time { color: #888; font-size: 0.85rem; }
+    .empty { text-align: center; padding: 2rem; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/family" class="back">← Back to Family Dashboard</a>
+    <h1>📊 ${child.child_name}'s Activity</h1>
+    
+    <div class="stats">
+      <div class="stat">
+        <h2>${totalMinutes}</h2>
+        <p>minutes this week</p>
+      </div>
+      <div class="stat">
+        <h2>${timeTracking.length}</h2>
+        <p>active days</p>
+      </div>
+      <div class="stat">
+        <h2>${activities.filter((a: any) => a.flagged).length}</h2>
+        <p>flagged items</p>
+      </div>
+    </div>
+    
+    <div class="card">
+      <h3 style="margin-bottom: 1rem;">Recent Activity</h3>
+      ${activities.length > 0 ? activities.map((a: any) => `
+        <div class="activity-item">
+          <div>
+            <span class="activity-type">${a.activity_type.replace(/_/g, ' ')}</span>
+            ${a.flagged ? ' 🚩' : ''}
+          </div>
+          <span class="activity-time">${new Date(a.created_at).toLocaleString()}</span>
+        </div>
+      `).join('') : '<div class="empty">No activity recorded yet</div>'}
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
 });
 
 export default app;
