@@ -3394,6 +3394,592 @@ app.get('/family/activity/:id', async (c) => {
   return c.html(html);
 });
 
+// ============ SOCIAL PROFILES ============
+
+import {
+  getProfile,
+  updateProfile,
+  getPrivacySettings,
+  updatePrivacySettings,
+  canViewSection,
+  getFriendshipStatus,
+  sendFriendRequest,
+  respondToFriendRequest,
+  unfriendOrBlock,
+  getFriends,
+  getPendingRequests,
+  createWallPost,
+  getWallPosts,
+  recordProfileVisit,
+} from './lib/profiles';
+
+// GET /profile/:username - View user profile
+app.get('/profile/:username', async (c) => {
+  const username = c.req.param('username');
+  const viewer = await getSessionUser(c);
+
+  // Find the user
+  const profileUser = await c.env.DB.prepare(`
+    SELECT id, username, email, avatar_url, created_at FROM users WHERE username = ?
+  `).bind(username).first();
+
+  if (!profileUser) {
+    return c.html(`<!DOCTYPE html><html><head><title>Not Found - XAOSTECH</title></head><body style="background:#0a0a0a;color:#fff;font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;"><div style="text-align:center;"><h1>User not found</h1><a href="/" style="color:#f6821f;">Go home</a></div></body></html>`, 404);
+  }
+
+  const profileUserId = profileUser.id as string;
+  const viewerId = viewer?.id || null;
+  const isOwnProfile = viewerId === profileUserId;
+
+  // Get profile data
+  const profile = await getProfile(c.env.DB, profileUserId);
+  const privacy = await getPrivacySettings(c.env.DB, profileUserId);
+  const friendshipStatus = viewerId ? await getFriendshipStatus(c.env.DB, viewerId, profileUserId) : { isFriend: false, isPending: false, isBlocked: false };
+
+  // Record visit
+  if (viewerId && !isOwnProfile) {
+    await recordProfileVisit(c.env.DB, profileUserId, viewerId);
+  }
+
+  // Check permissions for each section
+  const canViewAbout = isOwnProfile || await canViewSection(c.env.DB, profileUserId, viewerId, 'about');
+  const canViewPhotos = isOwnProfile || await canViewSection(c.env.DB, profileUserId, viewerId, 'photos');
+  const canViewWall = isOwnProfile || await canViewSection(c.env.DB, profileUserId, viewerId, 'wall');
+  const canViewFriends = isOwnProfile || await canViewSection(c.env.DB, profileUserId, viewerId, 'friends');
+
+  // Get wall posts if allowed
+  const wallPosts = canViewWall ? await getWallPosts(c.env.DB, profileUserId, 10) : [];
+
+  // Get friends count if allowed
+  const friendsResult = canViewFriends ? await c.env.DB.prepare(`
+    SELECT COUNT(*) as count FROM friendships
+    WHERE (requester_id = ? OR addressee_id = ?) AND status = 'accepted'
+  `).bind(profileUserId, profileUserId).first() : null;
+  const friendsCount = friendsResult?.count || 0;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${profileUser.username} - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; }
+    .cover { height: 200px; background: ${profile?.cover_image_url ? `url(${profile.cover_image_url}) center/cover` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}; }
+    .profile-header { max-width: 900px; margin: -60px auto 0; padding: 0 1rem; position: relative; }
+    .avatar { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #0a0a0a; background: #333; }
+    .profile-info { display: flex; gap: 1.5rem; align-items: flex-end; }
+    .profile-details { flex: 1; padding-bottom: 0.5rem; }
+    .profile-details h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+    .profile-details .username { color: #888; margin-bottom: 0.5rem; }
+    .profile-actions { display: flex; gap: 0.5rem; padding-bottom: 0.5rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: #f6821f; color: #000; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none; font-weight: 600; border: none; cursor: pointer; font-size: 0.9rem; }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background: #333; color: #fff; }
+    .btn-danger { background: #dc3545; }
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem 1rem; }
+    .grid { display: grid; grid-template-columns: 300px 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    .card h3 { color: #f6821f; margin-bottom: 1rem; font-size: 1rem; }
+    .stat-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #333; }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: #888; }
+    .locked { opacity: 0.5; text-align: center; padding: 2rem; }
+    .locked-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .wall-post { padding: 1rem; border-bottom: 1px solid #333; }
+    .wall-post:last-child { border-bottom: none; }
+    .wall-post-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+    .wall-post-avatar { width: 36px; height: 36px; border-radius: 50%; background: #333; }
+    .wall-post-meta { flex: 1; }
+    .wall-post-author { font-weight: 600; }
+    .wall-post-time { color: #888; font-size: 0.8rem; }
+    .wall-post-content { line-height: 1.5; }
+    .wall-form { margin-bottom: 1rem; }
+    .wall-form textarea { width: 100%; background: #333; border: 1px solid #444; border-radius: 8px; padding: 0.75rem; color: #fff; font-family: inherit; resize: vertical; min-height: 80px; }
+    .wall-form textarea:focus { outline: none; border-color: #f6821f; }
+    .friends-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+    .friend-item { display: flex; flex-direction: column; align-items: center; padding: 0.5rem; }
+    .friend-avatar { width: 48px; height: 48px; border-radius: 50%; background: #333; margin-bottom: 0.25rem; }
+    .friend-name { font-size: 0.8rem; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80px; }
+  </style>
+</head>
+<body>
+  <div class="cover"></div>
+  
+  <div class="profile-header">
+    <div class="profile-info">
+      <img class="avatar" src="${profileUser.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(profileUser.username as string)}&background=f6821f&color=000`}" alt="${profileUser.username}">
+      <div class="profile-details">
+        <h1>${profile?.display_name || profileUser.username}</h1>
+        <p class="username">@${profileUser.username}</p>
+        ${canViewAbout && profile?.bio ? `<p style="color:#aaa;margin-top:0.5rem;">${profile.bio}</p>` : ''}
+      </div>
+      <div class="profile-actions">
+        ${isOwnProfile ? `
+          <a href="/profile/${profileUser.username}/edit" class="btn">✏️ Edit Profile</a>
+          <a href="/profile/${profileUser.username}/privacy" class="btn btn-secondary">🔒 Privacy</a>
+        ` : viewer ? `
+          ${friendshipStatus.isFriend ? `
+            <a href="/messages?to=${profileUser.username}" class="btn">💬 Message</a>
+            <form method="POST" action="/api/friends/${profileUserId}/remove" style="display:inline;">
+              <button type="submit" class="btn btn-secondary">Remove Friend</button>
+            </form>
+          ` : friendshipStatus.isPending ? `
+            ${friendshipStatus.requestDirection === 'received' ? `
+              <form method="POST" action="/api/friends/${profileUserId}/accept" style="display:inline;">
+                <button type="submit" class="btn">✓ Accept Request</button>
+              </form>
+              <form method="POST" action="/api/friends/${profileUserId}/reject" style="display:inline;">
+                <button type="submit" class="btn btn-secondary">✗ Decline</button>
+              </form>
+            ` : `
+              <button class="btn btn-secondary" disabled>Request Pending</button>
+            `}
+          ` : `
+            <form method="POST" action="/api/friends/${profileUserId}/request" style="display:inline;">
+              <button type="submit" class="btn">+ Add Friend</button>
+            </form>
+          `}
+        ` : `
+          <a href="/login?redirect=/profile/${profileUser.username}" class="btn btn-secondary">Login to Connect</a>
+        `}
+      </div>
+    </div>
+  </div>
+  
+  <div class="container">
+    <div class="grid">
+      <div class="sidebar">
+        <!-- About -->
+        <div class="card">
+          <h3>📋 About</h3>
+          ${canViewAbout ? `
+            ${profile?.location ? `<div class="stat-row"><span class="stat-label">📍 Location</span><span>${profile.location}</span></div>` : ''}
+            ${profile?.occupation ? `<div class="stat-row"><span class="stat-label">💼 Occupation</span><span>${profile.occupation}</span></div>` : ''}
+            ${profile?.company ? `<div class="stat-row"><span class="stat-label">🏢 Company</span><span>${profile.company}</span></div>` : ''}
+            ${profile?.website ? `<div class="stat-row"><span class="stat-label">🌐 Website</span><a href="${profile.website}" target="_blank" style="color:#f6821f;">${profile.website.replace(/^https?:\/\//, '')}</a></div>` : ''}
+            <div class="stat-row"><span class="stat-label">📅 Joined</span><span>${new Date(profileUser.created_at as string).toLocaleDateString()}</span></div>
+            ${!profile?.location && !profile?.occupation && !profile?.company && !profile?.website ? '<p style="color:#666;text-align:center;">No info shared yet</p>' : ''}
+          ` : `
+            <div class="locked">
+              <div class="locked-icon">🔒</div>
+              <p>This section is private</p>
+            </div>
+          `}
+        </div>
+        
+        <!-- Friends -->
+        <div class="card">
+          <h3>👥 Friends (${friendsCount})</h3>
+          ${canViewFriends ? `
+            <p style="color:#888;text-align:center;">Friends list coming soon</p>
+          ` : `
+            <div class="locked">
+              <div class="locked-icon">🔒</div>
+              <p>Friends list is private</p>
+            </div>
+          `}
+        </div>
+      </div>
+      
+      <div class="main">
+        <!-- Wall -->
+        <div class="card">
+          <h3>📝 Wall</h3>
+          ${canViewWall ? `
+            ${(isOwnProfile || (viewer && friendshipStatus.isFriend && privacy.who_can_post_on_wall !== 'nobody')) ? `
+              <form method="POST" action="/api/wall/${profileUserId}/post" class="wall-form">
+                <textarea name="content" placeholder="${isOwnProfile ? 'What\'s on your mind?' : `Write something to ${profileUser.username}...`}" required></textarea>
+                <button type="submit" class="btn" style="margin-top:0.5rem;">Post</button>
+              </form>
+            ` : ''}
+            
+            ${wallPosts.length > 0 ? wallPosts.map((post: any) => `
+              <div class="wall-post">
+                <div class="wall-post-header">
+                  <img class="wall-post-avatar" src="${post.author_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(post.author_username)}&background=333&color=fff`}" alt="">
+                  <div class="wall-post-meta">
+                    <span class="wall-post-author">${post.author_username}</span>
+                    <span class="wall-post-time">${new Date(post.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div class="wall-post-content">${post.content}</div>
+              </div>
+            `).join('') : '<p style="color:#666;text-align:center;padding:2rem;">No posts yet</p>'}
+          ` : `
+            <div class="locked">
+              <div class="locked-icon">🔒</div>
+              <p>Wall is private</p>
+            </div>
+          `}
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /api/wall/:userId/post - Create wall post
+app.post('/api/wall/:userId/post', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const profileUserId = c.req.param('userId');
+  const formData = await c.req.formData();
+  const content = formData.get('content')?.toString() || '';
+
+  if (!content.trim()) {
+    return c.redirect(`/profile/${profileUserId}?error=empty_post`);
+  }
+
+  // Check permissions
+  const isOwnProfile = user.id === profileUserId;
+  if (!isOwnProfile) {
+    const privacy = await getPrivacySettings(c.env.DB, profileUserId);
+    const friendshipStatus = await getFriendshipStatus(c.env.DB, user.id, profileUserId);
+    
+    if (privacy.who_can_post_on_wall === 'nobody') {
+      return c.redirect(`/profile/${profileUserId}?error=not_allowed`);
+    }
+    if (privacy.who_can_post_on_wall === 'friends' && !friendshipStatus.isFriend) {
+      return c.redirect(`/profile/${profileUserId}?error=not_friend`);
+    }
+  }
+
+  await createWallPost(c.env.DB, profileUserId, user.id, content);
+
+  // Get username for redirect
+  const profileUser = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(profileUserId).first();
+  return c.redirect(`/profile/${profileUser?.username || profileUserId}`);
+});
+
+// POST /api/friends/:userId/request - Send friend request
+app.post('/api/friends/:userId/request', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const addresseeId = c.req.param('userId');
+  const result = await sendFriendRequest(c.env.DB, user.id, addresseeId);
+
+  const addressee = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(addresseeId).first();
+  return c.redirect(`/profile/${addressee?.username}?${result.success ? 'success=request_sent' : 'error=' + encodeURIComponent(result.message)}`);
+});
+
+// POST /api/friends/:userId/accept - Accept friend request
+app.post('/api/friends/:userId/accept', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const requesterId = c.req.param('userId');
+  await respondToFriendRequest(c.env.DB, user.id, requesterId, true);
+
+  const requester = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(requesterId).first();
+  return c.redirect(`/profile/${requester?.username}?success=friend_added`);
+});
+
+// POST /api/friends/:userId/reject - Reject friend request
+app.post('/api/friends/:userId/reject', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const requesterId = c.req.param('userId');
+  await respondToFriendRequest(c.env.DB, user.id, requesterId, false);
+
+  const requester = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(requesterId).first();
+  return c.redirect(`/profile/${requester?.username}`);
+});
+
+// POST /api/friends/:userId/remove - Remove friend
+app.post('/api/friends/:userId/remove', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+
+  const friendId = c.req.param('userId');
+  await unfriendOrBlock(c.env.DB, user.id, friendId, false);
+
+  const friend = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?').bind(friendId).first();
+  return c.redirect(`/profile/${friend?.username}?success=friend_removed`);
+});
+
+// GET /profile/:username/edit - Edit profile page
+app.get('/profile/:username/edit', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  // Verify user owns this profile
+  if (user.username !== c.req.param('username')) {
+    return c.redirect(`/profile/${c.req.param('username')}`);
+  }
+
+  const profile = await getProfile(c.env.DB, user.id);
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Profile - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .back { color: #888; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .back:hover { color: #fff; }
+    h1 { color: #f6821f; margin-bottom: 2rem; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; color: #888; }
+    .form-group input, .form-group textarea { width: 100%; background: #333; border: 1px solid #444; border-radius: 6px; padding: 0.75rem; color: #fff; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #f6821f; }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+    .btn { display: inline-block; background: #f6821f; color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; width: 100%; }
+    .btn:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/profile/${user.username}" class="back">← Back to Profile</a>
+    <h1>✏️ Edit Profile</h1>
+    
+    <form method="POST" action="/profile/${user.username}/edit">
+      <div class="card">
+        <div class="form-group">
+          <label>Display Name</label>
+          <input type="text" name="display_name" value="${profile?.display_name || ''}" placeholder="Your display name">
+        </div>
+        
+        <div class="form-group">
+          <label>Bio</label>
+          <textarea name="bio" placeholder="Tell us about yourself...">${profile?.bio || ''}</textarea>
+        </div>
+        
+        <div class="form-group">
+          <label>Location</label>
+          <input type="text" name="location" value="${profile?.location || ''}" placeholder="City, Country">
+        </div>
+        
+        <div class="form-group">
+          <label>Website</label>
+          <input type="url" name="website" value="${profile?.website || ''}" placeholder="https://yourwebsite.com">
+        </div>
+        
+        <div class="form-group">
+          <label>Occupation</label>
+          <input type="text" name="occupation" value="${profile?.occupation || ''}" placeholder="What do you do?">
+        </div>
+        
+        <div class="form-group">
+          <label>Company</label>
+          <input type="text" name="company" value="${profile?.company || ''}" placeholder="Where do you work?">
+        </div>
+      </div>
+      
+      <button type="submit" class="btn">Save Changes</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /profile/:username/edit - Save profile edits
+app.post('/profile/:username/edit', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  if (user.username !== c.req.param('username')) {
+    return c.redirect(`/profile/${c.req.param('username')}`);
+  }
+
+  const formData = await c.req.formData();
+  
+  await updateProfile(c.env.DB, user.id, {
+    display_name: formData.get('display_name')?.toString() || null,
+    bio: formData.get('bio')?.toString() || null,
+    location: formData.get('location')?.toString() || null,
+    website: formData.get('website')?.toString() || null,
+    occupation: formData.get('occupation')?.toString() || null,
+    company: formData.get('company')?.toString() || null,
+  } as any);
+
+  return c.redirect(`/profile/${user.username}?success=profile_updated`);
+});
+
+// GET /profile/:username/privacy - Privacy settings page
+app.get('/profile/:username/privacy', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  if (user.username !== c.req.param('username')) {
+    return c.redirect(`/profile/${c.req.param('username')}`);
+  }
+
+  const privacy = await getPrivacySettings(c.env.DB, user.id);
+
+  const visibilityOptions = [
+    { value: 'public', label: '🌐 Public (Everyone)' },
+    { value: 'friends-of-friends', label: '👥 Friends of Friends' },
+    { value: 'friends', label: '👤 Friends Only' },
+    { value: 'private', label: '🔒 Private (Only Me)' },
+  ];
+
+  const makeSelect = (name: string, value: string) => `
+    <select name="${name}" style="width:100%;background:#333;border:1px solid #444;border-radius:6px;padding:0.75rem;color:#fff;">
+      ${visibilityOptions.map(opt => `<option value="${opt.value}" ${value === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+    </select>
+  `;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Settings - XAOSTECH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #fff; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .back { color: #888; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .back:hover { color: #fff; }
+    h1 { color: #f6821f; margin-bottom: 2rem; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; }
+    .card h3 { color: #f6821f; margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; }
+    .form-group .desc { color: #888; font-size: 0.85rem; margin-top: 0.25rem; }
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid #333; }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle { position: relative; width: 50px; height: 26px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #333; border-radius: 26px; cursor: pointer; transition: 0.3s; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s; }
+    .toggle input:checked + .slider { background: #f6821f; }
+    .toggle input:checked + .slider:before { transform: translateX(24px); }
+    .btn { display: inline-block; background: #f6821f; color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; width: 100%; }
+    .btn:hover { opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/profile/${user.username}" class="back">← Back to Profile</a>
+    <h1>🔒 Privacy Settings</h1>
+    
+    <form method="POST" action="/profile/${user.username}/privacy">
+      <div class="card">
+        <h3>👁️ Who Can See Your Profile</h3>
+        
+        <div class="form-group">
+          <label>About Section</label>
+          ${makeSelect('about_visibility', privacy.about_visibility)}
+          <p class="desc">Bio, location, occupation, website</p>
+        </div>
+        
+        <div class="form-group">
+          <label>Photos</label>
+          ${makeSelect('photos_visibility', privacy.photos_visibility)}
+        </div>
+        
+        <div class="form-group">
+          <label>Wall Posts</label>
+          ${makeSelect('wall_visibility', privacy.wall_visibility)}
+        </div>
+        
+        <div class="form-group">
+          <label>Friends List</label>
+          ${makeSelect('friends_list_visibility', privacy.friends_list_visibility)}
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>✍️ Wall Permissions</h3>
+        
+        <div class="form-group">
+          <label>Who Can Post on Your Wall</label>
+          <select name="who_can_post_on_wall" style="width:100%;background:#333;border:1px solid #444;border-radius:6px;padding:0.75rem;color:#fff;">
+            <option value="public" ${privacy.who_can_post_on_wall === 'public' ? 'selected' : ''}>🌐 Anyone</option>
+            <option value="friends" ${privacy.who_can_post_on_wall === 'friends' ? 'selected' : ''}>👤 Friends Only</option>
+            <option value="nobody" ${privacy.who_can_post_on_wall === 'nobody' ? 'selected' : ''}>🚫 Nobody</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="card">
+        <h3>🔍 Discoverability</h3>
+        
+        <div class="toggle-row">
+          <div>
+            <strong>Searchable</strong>
+            <p class="desc">Appear in user search results</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" name="searchable" ${privacy.searchable ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        
+        <div class="toggle-row">
+          <div>
+            <strong>Show Online Status</strong>
+            <p class="desc">Let others see when you're online</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" name="show_online_status" ${privacy.show_online_status ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        
+        <div class="toggle-row">
+          <div>
+            <strong>Allow Friend Requests</strong>
+            <p class="desc">Let others send you friend requests</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" name="allow_friend_requests" ${privacy.allow_friend_requests ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <button type="submit" class="btn">Save Privacy Settings</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
+// POST /profile/:username/privacy - Save privacy settings
+app.post('/profile/:username/privacy', async (c) => {
+  const user = await getSessionUser(c);
+  if (!user) return c.redirect('/login');
+
+  if (user.username !== c.req.param('username')) {
+    return c.redirect(`/profile/${c.req.param('username')}`);
+  }
+
+  const formData = await c.req.formData();
+  
+  await updatePrivacySettings(c.env.DB, user.id, {
+    about_visibility: formData.get('about_visibility')?.toString() as any,
+    photos_visibility: formData.get('photos_visibility')?.toString() as any,
+    wall_visibility: formData.get('wall_visibility')?.toString() as any,
+    friends_list_visibility: formData.get('friends_list_visibility')?.toString() as any,
+    who_can_post_on_wall: formData.get('who_can_post_on_wall')?.toString() as any,
+    searchable: formData.has('searchable'),
+    show_online_status: formData.has('show_online_status'),
+    allow_friend_requests: formData.has('allow_friend_requests'),
+  });
+
+  return c.redirect(`/profile/${user.username}/privacy?success=saved`);
+});
+
 // ============ FAMILY BILLING ============
 
 // GET /family/billing - Family billing management
