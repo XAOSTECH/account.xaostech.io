@@ -1015,8 +1015,8 @@ app.patch('/profile', async (c) => {
 
     // Update session
     user.username = username;
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
-      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), {
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000)
     });
 
     return c.json({ message: 'Profile updated', username });
@@ -1064,8 +1064,8 @@ app.post('/profile/avatar', async (c) => {
 
     // Update session
     user.avatar_url = dataUrl;
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
-      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), {
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000)
     });
 
     return c.json({ message: 'Avatar updated', avatar_url: dataUrl });
@@ -1105,8 +1105,8 @@ app.post('/profile/reset-github-avatar', async (c) => {
 
     // Update session
     user.avatar_url = user.github_avatar_url;
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
-      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), {
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000)
     });
 
     return c.json({ message: 'Avatar reset to GitHub', avatar_url: user.github_avatar_url });
@@ -1151,11 +1151,11 @@ app.post('/profile/restore-github', async (c) => {
     // Update session
     if (user.github_username) user.username = user.github_username;
     if (user.github_avatar_url) user.avatar_url = user.github_avatar_url;
-    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), { 
-      expirationTtl: Math.floor((user.expires - Date.now()) / 1000) 
+    await c.env.SESSIONS_KV.put(sessionId, JSON.stringify(user), {
+      expirationTtl: Math.floor((user.expires - Date.now()) / 1000)
     });
 
-    return c.json({ 
+    return c.json({
       message: 'Profile restored to GitHub settings',
       username: user.username,
       avatar_url: user.avatar_url
@@ -1184,7 +1184,7 @@ app.get('/admin', async (c) => {
   }
 
   const user = JSON.parse(sessionData);
-  
+
   // Only owner can access admin panel
   if (user.role !== 'owner') {
     return c.redirect('/?error=unauthorized');
@@ -1363,7 +1363,7 @@ app.patch('/admin/users/:user_id/role', async (c) => {
   }
 
   const currentUser = JSON.parse(sessionData);
-  
+
   // Only owner can change roles
   if (currentUser.role !== 'owner') {
     return c.json({ error: 'Only owner can change user roles' }, 403);
