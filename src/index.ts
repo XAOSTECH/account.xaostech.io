@@ -80,13 +80,24 @@ app.get('/', async (c) => {
     }
   }
 
+  // Role badge styling
+  const roleBadge = (role: string) => {
+    const colors: Record<string, string> = {
+      owner: 'background: linear-gradient(135deg, #f6821f, #e65100); color: #fff;',
+      admin: 'background: #7c3aed; color: #fff;',
+      user: 'background: #333; color: #aaa;',
+    };
+    return `<span style="display:inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: bold; margin-left: 0.5rem; ${colors[role] || colors.user}">${role.toUpperCase()}</span>`;
+  };
+
   const userSection = user ?
     '<div class="user-card">' +
     '<img src="' + (user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png') + '" alt="Avatar" class="avatar">' +
     '<div class="user-info">' +
-    '<h2>' + (user.username || 'User') + '</h2>' +
+    '<h2>' + (user.username || 'User') + roleBadge(user.role || 'user') + '</h2>' +
     '<p>' + (user.email || '') + '</p>' +
     '</div></div>' +
+    (user.isNewUser ? '<div class="welcome-banner"><strong>🎉 Welcome to XAOSTECH!</strong> Visit <a href="/service-accounts">API Keys</a> to get your access token.</div>' : '') +
     '<div class="actions">' +
     '<a href="/profile" class="btn">View Profile</a>' +
     '<a href="/service-accounts" class="btn secondary">API Keys</a>' +
@@ -101,7 +112,7 @@ app.get('/', async (c) => {
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577v-2.165c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.09-.744.083-.729.083-.729 1.205.084 1.84 1.236 1.84 1.236 1.07 1.835 2.807 1.305 3.492.998.108-.775.42-1.305.763-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.382 1.236-3.222-.124-.303-.536-1.524.117-3.176 0 0 1.008-.322 3.3 1.23A11.5 11.5 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.29-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.873.118 3.176.77.84 1.235 1.912 1.235 3.222 0 4.61-2.807 5.625-5.48 5.92.43.372.824 1.102.824 2.222v3.293c0 .322.218.694.825.576C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>' +
     'Sign in with GitHub</a></div>';
 
-  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XAOSTECH Account</title><link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png"><style>:root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; } .container { max-width: 500px; width: 100%; text-align: center; } h1 { color: var(--primary); margin-bottom: 2rem; font-size: 2rem; } .user-card { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 2rem; border-radius: 12px; margin-bottom: 2rem; } .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--primary); } .user-info { text-align: left; } .user-info h2 { margin-bottom: 0.25rem; } .user-info p { opacity: 0.7; font-size: 0.9rem; } .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; } .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; font-size: 1rem; } .btn:hover { opacity: 0.9; } .btn.secondary { background: transparent; border: 2px solid var(--primary); color: var(--primary); } .btn.github-btn { background: #24292e; color: #fff; padding: 1rem 2rem; font-size: 1.1rem; } .btn.github-btn:hover { background: #2f363d; } .login-section { background: var(--card-bg); padding: 3rem 2rem; border-radius: 12px; } .login-section h2 { margin-bottom: 0.5rem; } .login-section p { opacity: 0.7; margin-bottom: 2rem; } footer { margin-top: 3rem; opacity: 0.5; font-size: 0.85rem; } footer a { color: var(--primary); }</style></head><body><div class="container"><h1>🔐 XAOSTECH Account</h1>' + userSection + '</div><footer><a href="https://xaostech.io">← Back to XAOSTECH</a></footer></body></html>';
+  const html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>XAOSTECH Account</title><link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png"><style>:root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; } * { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; } .container { max-width: 500px; width: 100%; text-align: center; } h1 { color: var(--primary); margin-bottom: 2rem; font-size: 2rem; } .user-card { display: flex; align-items: center; gap: 1.5rem; background: var(--card-bg); padding: 2rem; border-radius: 12px; margin-bottom: 1rem; } .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--primary); } .user-info { text-align: left; } .user-info h2 { margin-bottom: 0.25rem; display: flex; align-items: center; flex-wrap: wrap; } .user-info p { opacity: 0.7; font-size: 0.9rem; } .welcome-banner { background: linear-gradient(135deg, #1a3a1a, #0a2a0a); border: 1px solid #2a5a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; text-align: left; } .welcome-banner a { color: var(--primary); } .actions { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; } .btn { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--primary); color: #000; padding: 0.75rem 1.5rem; border-radius: 6px; text-decoration: none; font-weight: bold; border: none; cursor: pointer; font-size: 1rem; } .btn:hover { opacity: 0.9; } .btn.secondary { background: transparent; border: 2px solid var(--primary); color: var(--primary); } .btn.github-btn { background: #24292e; color: #fff; padding: 1rem 2rem; font-size: 1.1rem; } .btn.github-btn:hover { background: #2f363d; } .login-section { background: var(--card-bg); padding: 3rem 2rem; border-radius: 12px; } .login-section h2 { margin-bottom: 0.5rem; } .login-section p { opacity: 0.7; margin-bottom: 2rem; } footer { margin-top: 3rem; opacity: 0.5; font-size: 0.85rem; } footer a { color: var(--primary); }</style></head><body><div class="container"><h1>🔐 XAOSTECH Account</h1>' + userSection + '</div><footer><a href="https://xaostech.io">← Back to XAOSTECH</a></footer></body></html>';
   return c.html(html);
 });
 
@@ -130,10 +141,12 @@ app.get('/me', async (c) => {
     return c.json({
       authenticated: true,
       user: {
-        id: user.id,
+        id: user.userId || user.id,
         username: user.username,
         email: user.email,
         avatar_url: user.avatar_url,
+        role: user.role || 'user',
+        isNewUser: user.isNewUser || false,
       }
     });
   } catch (err) {
@@ -920,6 +933,8 @@ app.get('/service-accounts', async (c) => {
     .btn:hover { opacity: 0.9; }
     .btn-danger { background: #dc3545; }
     .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-small { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+    .btn-copy { background: #28a745; }
     .empty { text-align: center; padding: 3rem; color: #666; }
     .form-group { margin-bottom: 1rem; }
     .form-group label { display: block; margin-bottom: 0.5rem; }
@@ -927,6 +942,11 @@ app.get('/service-accounts', async (c) => {
     .actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
     .status-active { color: #28a745; }
     .status-inactive { color: #dc3545; }
+    .key-display { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; padding: 1rem; background: #0a0a0a; border-radius: 6px; border: 1px solid var(--border); }
+    .key-display code { flex: 1; word-break: break-all; font-family: monospace; font-size: 0.9rem; }
+    .key-display .masked { color: #666; }
+    .key-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
+    .success-banner { background: linear-gradient(135deg, #1a3a1a, #0a2a0a); border: 1px solid #2a5a2a; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
   </style>
 </head>
 <body>
@@ -944,15 +964,24 @@ app.get('/service-accounts', async (c) => {
         </div>
         <button type="submit" class="btn">Create API Key</button>
       </form>
-      <div id="new-key-result" style="display:none; margin-top:1rem; padding:1rem; background:#1a3a1a; border-radius:6px;">
-        <strong>Your new API key:</strong>
-        <code id="new-key-value" style="display:block; margin-top:0.5rem; word-break:break-all; background:#0a0a0a; padding:0.5rem; border-radius:4px;"></code>
-        <small style="color:#888;">Save this key now. You won't be able to see it again.</small>
+      <div id="new-key-result" style="display:none; margin-top:1rem;">
+        <div class="success-banner">
+          <strong>🎉 API Key Created!</strong>
+          <p style="margin-top:0.5rem; color:#aaa;">Save this key now - you won't see it again.</p>
+        </div>
+        <div class="key-display">
+          <code id="new-key-value"></code>
+          <div class="key-actions">
+            <button class="btn btn-small btn-secondary" onclick="toggleKeyVisibility()" id="toggle-btn">👁 Show</button>
+            <button class="btn btn-small btn-copy" onclick="copyKey()">📋 Copy</button>
+          </div>
+        </div>
+        <input type="hidden" id="new-key-raw">
       </div>
     </div>
 
     <h3 style="margin: 2rem 0 1rem;">Your API Keys</h3>
-    ${accounts.length === 0 ? '<div class="empty">No API keys yet. Create one above to get started.</div>' : 
+    ${accounts.length === 0 ? '<div class="empty">No API keys yet. Create one above to get started.</div>' :
       accounts.map((acc: any) => `
         <div class="card">
           <div class="key-name">${acc.name}</div>
@@ -973,6 +1002,33 @@ app.get('/service-accounts', async (c) => {
   </div>
 
   <script>
+    let keyVisible = false;
+    
+    function maskKey(key) {
+      return key.substring(0, 8) + '•'.repeat(Math.max(0, key.length - 12)) + key.substring(key.length - 4);
+    }
+    
+    function toggleKeyVisibility() {
+      const raw = document.getElementById('new-key-raw').value;
+      const display = document.getElementById('new-key-value');
+      const btn = document.getElementById('toggle-btn');
+      keyVisible = !keyVisible;
+      display.textContent = keyVisible ? raw : maskKey(raw);
+      display.className = keyVisible ? '' : 'masked';
+      btn.textContent = keyVisible ? '🙈 Hide' : '👁 Show';
+    }
+    
+    function copyKey() {
+      const raw = document.getElementById('new-key-raw').value;
+      navigator.clipboard.writeText(raw).then(() => {
+        const btn = event.target;
+        const original = btn.textContent;
+        btn.textContent = '✓ Copied!';
+        btn.style.background = '#28a745';
+        setTimeout(() => { btn.textContent = original; btn.style.background = ''; }, 2000);
+      });
+    }
+    
     document.getElementById('create-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('name').value;
@@ -985,10 +1041,12 @@ app.get('/service-accounts', async (c) => {
         });
         const data = await res.json();
         if (data.key) {
-          document.getElementById('new-key-value').textContent = data.key;
+          document.getElementById('new-key-raw').value = data.key;
+          document.getElementById('new-key-value').textContent = maskKey(data.key);
+          document.getElementById('new-key-value').className = 'masked';
           document.getElementById('new-key-result').style.display = 'block';
           document.getElementById('name').value = '';
-          setTimeout(() => location.reload(), 3000);
+          keyVisible = false;
         } else {
           alert(data.error || 'Failed to create key');
         }
