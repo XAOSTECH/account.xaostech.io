@@ -64,7 +64,7 @@ app.get('/', async (c) => {
   const cookie = c.req.header('Cookie') || '';
   const sessionMatch = cookie.match(/session_id=([^;]+)/);
   const sessionId = sessionMatch ? sessionMatch[1] : null;
-  
+
   let user = null;
   if (sessionId) {
     try {
@@ -80,7 +80,7 @@ app.get('/', async (c) => {
     }
   }
 
-  const userSection = user ? 
+  const userSection = user ?
     '<div class="user-card">' +
     '<img src="' + (user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png') + '" alt="Avatar" class="avatar">' +
     '<div class="user-info">' +
@@ -93,7 +93,7 @@ app.get('/', async (c) => {
     '<form action="/logout" method="POST" style="display:inline">' +
     '<button type="submit" class="btn secondary">Logout</button>' +
     '</form></div>'
-    : 
+    :
     '<div class="login-section">' +
     '<h2>Sign in to your account</h2>' +
     '<p>Access your XAOSTECH dashboard, manage API keys, and more.</p>' +
@@ -110,23 +110,23 @@ app.get('/me', async (c) => {
   const cookie = c.req.header('Cookie') || '';
   const sessionMatch = cookie.match(/session_id=([^;]+)/);
   const sessionId = sessionMatch ? sessionMatch[1] : null;
-  
+
   if (!sessionId) {
     return c.json({ authenticated: false }, 401);
   }
-  
+
   try {
     const sessionData = await c.env.SESSIONS_KV.get(sessionId);
     if (!sessionData) {
       return c.json({ authenticated: false, error: 'Session not found' }, 401);
     }
-    
+
     const user = JSON.parse(sessionData);
     if (user.expires && user.expires < Date.now()) {
       await c.env.SESSIONS_KV.delete(sessionId);
       return c.json({ authenticated: false, error: 'Session expired' }, 401);
     }
-    
+
     return c.json({
       authenticated: true,
       user: {
@@ -160,7 +160,7 @@ app.post('/verify', async (c) => {
   const { token, tokenType } = await c.req.json();
 
   if (!token || !tokenType) {
-    return c.json({ 
+    return c.json({
       error: 'Missing token or tokenType',
       valid: false,
     }, 400);
@@ -173,7 +173,7 @@ app.post('/verify', async (c) => {
       // Verify session ID in KV
       const sessionData = await c.env.SESSIONS_KV.get(token);
       if (!sessionData) {
-        return c.json({ 
+        return c.json({
           error: 'Invalid session',
           valid: false,
         }, 401);
@@ -184,7 +184,7 @@ app.post('/verify', async (c) => {
       // Check expiration
       if (userData.expires && userData.expires < Date.now()) {
         await c.env.SESSIONS_KV.delete(token);
-        return c.json({ 
+        return c.json({
           error: 'Session expired',
           valid: false,
         }, 401);
@@ -197,7 +197,7 @@ app.post('/verify', async (c) => {
         ).bind(token).first();
 
         if (!user) {
-          return c.json({ 
+          return c.json({
             error: 'Invalid or expired token',
             valid: false,
           }, 401);
@@ -205,7 +205,7 @@ app.post('/verify', async (c) => {
 
         userData = user;
       } catch (dbErr) {
-        return c.json({ 
+        return c.json({
           error: 'Token verification failed',
           valid: false,
         }, 401);
@@ -219,7 +219,7 @@ app.post('/verify', async (c) => {
         ).bind(tokenHash).first();
 
         if (!account) {
-          return c.json({ 
+          return c.json({
             error: 'Invalid or disabled service token',
             valid: false,
           }, 401);
@@ -239,13 +239,13 @@ app.post('/verify', async (c) => {
         };
       } catch (dbErr) {
         console.error('Service token verification error:', dbErr);
-        return c.json({ 
+        return c.json({
           error: 'Service token verification failed',
           valid: false,
         }, 401);
       }
     } else {
-      return c.json({ 
+      return c.json({
         error: 'Unknown tokenType',
         valid: false,
       }, 400);
@@ -266,7 +266,7 @@ app.post('/verify', async (c) => {
     });
   } catch (err) {
     console.error('Verification error:', err);
-    return c.json({ 
+    return c.json({
       error: 'Verification failed',
       valid: false,
     }, 500);
@@ -281,8 +281,11 @@ app.post('/verify', async (c) => {
 // This legacy endpoint below is DEPRECATED - keeping for backwards compatibility temporarily
 
 app.get('/profile', async (c) => {
-  const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+  // Read session from cookie (browser request) or Authorization header (API request)
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : c.req.header('Authorization')?.split(' ')[1];
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -292,7 +295,7 @@ app.get('/profile', async (c) => {
     if (!sessionData) {
       return c.json({ error: 'Session expired' }, 401);
     }
-    
+
     const user = JSON.parse(sessionData);
     if (user.expires < Date.now()) {
       await c.env.SESSIONS_KV.delete(sessionId);
@@ -306,13 +309,26 @@ app.get('/profile', async (c) => {
 });
 
 app.post('/logout', async (c) => {
-  const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+  // Read session from cookie (form POST) or Authorization header (API request)
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : c.req.header('Authorization')?.split(' ')[1];
+
   if (sessionId) {
     await c.env.SESSIONS_KV.delete(sessionId);
   }
 
-  return c.json({ success: true });
+  // Clear the session cookie
+  const cookieDomain = c.env.COOKIE_DOMAIN || '.xaostech.io';
+  const clearCookie = `session_id=deleted; Domain=${cookieDomain}; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+
+  return new Response(null, {
+    status: 302,
+    headers: [
+      ['Location', '/'],
+      ['Set-Cookie', clearCookie],
+    ]
+  });
 });
 
 // ===== PASSWORD RESET FLOW (Zero-Trust Pattern) =====
@@ -373,18 +389,18 @@ app.get('/reset-password/:token', async (c) => {
 
   try {
     const resetData = await c.env.PASSWORD_RESET_KV.get(token);
-    
+
     if (!resetData) {
       return c.json({ error: 'Invalid or expired token' }, 400);
     }
 
     const { user_id, expires } = JSON.parse(resetData);
-    
+
     if (expires < Date.now()) {
       return c.json({ error: 'Token expired' }, 400);
     }
 
-    return c.json({ 
+    return c.json({
       valid: true,
       user_id,
       token_expires_in_seconds: Math.floor((expires - Date.now()) / 1000)
@@ -399,13 +415,13 @@ app.put('/reset-password', async (c) => {
     const { token, password } = ResetPasswordSchema.parse(await c.req.json());
 
     const resetData = await c.env.PASSWORD_RESET_KV.get(token);
-    
+
     if (!resetData) {
       return c.json({ error: 'Invalid or expired token' }, 400);
     }
 
     const { user_id, expires } = JSON.parse(resetData);
-    
+
     if (expires < Date.now()) {
       return c.json({ error: 'Token expired' }, 400);
     }
@@ -445,7 +461,7 @@ app.put('/reset-password', async (c) => {
 
 app.post('/2fa/setup', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -460,7 +476,7 @@ app.post('/2fa/setup', async (c) => {
 
     // Generate secret (in real app, use speakeasy or totp-generator)
     const secret = crypto.randomUUID().replace(/-/g, '').slice(0, 32);
-    
+
     // QR code would be generated client-side with: otpauth://totp/xaostech.io:${user.email}?secret=${secret}
     const otpauthUrl = `otpauth://totp/xaostech.io:${user.email}?secret=${secret}&issuer=xaostech.io`;
 
@@ -483,7 +499,7 @@ app.post('/2fa/setup', async (c) => {
 
 app.post('/2fa/verify', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -491,7 +507,7 @@ app.post('/2fa/verify', async (c) => {
   try {
     const { code } = await c.req.json();
     const sessionData = await c.env.SESSIONS_KV.get(sessionId);
-    
+
     if (!sessionData) {
       return c.json({ error: 'Session expired' }, 401);
     }
@@ -506,7 +522,7 @@ app.post('/2fa/verify', async (c) => {
 
     // Get pending secret
     const pendingData = await c.env.RECOVERY_CODES_KV.get(`2fa_pending:${user.id}`);
-    
+
     if (!pendingData) {
       return c.json({ error: '2FA setup not initiated or expired' }, 400);
     }
@@ -514,7 +530,7 @@ app.post('/2fa/verify', async (c) => {
     const { secret } = JSON.parse(pendingData);
 
     // Generate recovery codes (8 codes, 10 chars each)
-    const recoveryCodes = Array.from({ length: 8 }, () => 
+    const recoveryCodes = Array.from({ length: 8 }, () =>
       crypto.getRandomValues(new Uint8Array(5)).reduce((a, b) => a + b.toString(16).padStart(2, '0'), '')
     );
 
@@ -558,7 +574,7 @@ app.post('/2fa/verify', async (c) => {
 
 app.post('/gdpr/export-request', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -607,7 +623,7 @@ app.post('/gdpr/export-request', async (c) => {
        VALUES (?, 'gdpr_export_requested', ?, datetime('now'))`
     ).bind(user.id, c.req.header('CF-Connecting-IP') || 'unknown').run();
 
-    return c.json({ 
+    return c.json({
       message: 'Export requested. Check your email to confirm.',
       export_id: exportId
     }, 200);
@@ -671,7 +687,7 @@ app.get('/gdpr/export/:token', async (c) => {
 
 app.post('/gdpr/delete-request', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -733,7 +749,7 @@ app.post('/gdpr/delete-request', async (c) => {
 
 app.post('/gdpr/cancel-deletion/:deletion_id', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -741,7 +757,7 @@ app.post('/gdpr/cancel-deletion/:deletion_id', async (c) => {
   try {
     const deletionId = c.req.param('deletion_id');
     const sessionData = await c.env.SESSIONS_KV.get(sessionId);
-    
+
     if (!sessionData) {
       return c.json({ error: 'Session expired' }, 401);
     }
@@ -799,7 +815,7 @@ async function hashPassword(password: string): Promise<string> {
 
 app.post('/service-account/create', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -851,9 +867,156 @@ app.post('/service-account/create', async (c) => {
   }
 });
 
+// Service accounts HTML page
+app.get('/service-accounts', async (c) => {
+  const cookie = c.req.header('Cookie') || '';
+  const cookieMatch = cookie.match(/session_id=([^;]+)/);
+  const sessionId = cookieMatch ? cookieMatch[1] : null;
+
+  if (!sessionId) {
+    return c.redirect('/');
+  }
+
+  const sessionData = await c.env.SESSIONS_KV.get(sessionId);
+  if (!sessionData) {
+    return c.redirect('/');
+  }
+
+  const user = JSON.parse(sessionData);
+
+  // Fetch service accounts
+  let accounts: any[] = [];
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT id, name, scopes, rate_limit, active, created_at, last_used_at
+       FROM service_accounts WHERE owner_id = ? ORDER BY created_at DESC`
+    ).bind(user.userId || user.id).all();
+    accounts = result.results || [];
+  } catch (err) {
+    console.error('Failed to fetch service accounts:', err);
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Keys - XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style>
+    :root { --primary: #f6821f; --bg: #0a0a0a; --text: #e0e0e0; --card-bg: #1a1a1a; --border: #333; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: var(--primary); margin-bottom: 0.5rem; }
+    .subtitle { color: #888; margin-bottom: 2rem; }
+    .back { color: var(--primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; }
+    .key-name { font-weight: bold; font-size: 1.1rem; }
+    .key-meta { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
+    .key-scopes { display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .scope { background: #333; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+    .btn { background: var(--primary); color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-size: 1rem; text-decoration: none; display: inline-block; }
+    .btn:hover { opacity: 0.9; }
+    .btn-danger { background: #dc3545; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .empty { text-align: center; padding: 3rem; color: #666; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; }
+    .form-group input { width: 100%; padding: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+    .actions { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .status-active { color: #28a745; }
+    .status-inactive { color: #dc3545; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="/" class="back">← Back to Dashboard</a>
+    <h1>API Keys</h1>
+    <p class="subtitle">Manage your service account tokens for programmatic access</p>
+    
+    <div class="card">
+      <h3>Create New API Key</h3>
+      <form id="create-form">
+        <div class="form-group">
+          <label for="name">Key Name</label>
+          <input type="text" id="name" name="name" placeholder="e.g., CI/CD Pipeline" required>
+        </div>
+        <button type="submit" class="btn">Create API Key</button>
+      </form>
+      <div id="new-key-result" style="display:none; margin-top:1rem; padding:1rem; background:#1a3a1a; border-radius:6px;">
+        <strong>Your new API key:</strong>
+        <code id="new-key-value" style="display:block; margin-top:0.5rem; word-break:break-all; background:#0a0a0a; padding:0.5rem; border-radius:4px;"></code>
+        <small style="color:#888;">Save this key now. You won't be able to see it again.</small>
+      </div>
+    </div>
+
+    <h3 style="margin: 2rem 0 1rem;">Your API Keys</h3>
+    ${accounts.length === 0 ? '<div class="empty">No API keys yet. Create one above to get started.</div>' : 
+      accounts.map((acc: any) => `
+        <div class="card">
+          <div class="key-name">${acc.name}</div>
+          <div class="key-meta">
+            Created: ${new Date(acc.created_at * 1000).toLocaleDateString()} · 
+            Status: <span class="${acc.active ? 'status-active' : 'status-inactive'}">${acc.active ? 'Active' : 'Inactive'}</span>
+            ${acc.last_used_at ? ' · Last used: ' + new Date(acc.last_used_at * 1000).toLocaleDateString() : ''}
+          </div>
+          <div class="key-scopes">
+            ${(typeof acc.scopes === 'string' ? JSON.parse(acc.scopes) : acc.scopes).map((s: string) => `<span class="scope">${s}</span>`).join('')}
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary" onclick="toggleKey('${acc.id}')">${acc.active ? 'Disable' : 'Enable'}</button>
+            <button class="btn btn-danger" onclick="deleteKey('${acc.id}')">Delete</button>
+          </div>
+        </div>
+      `).join('')}
+  </div>
+
+  <script>
+    document.getElementById('create-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value;
+      try {
+        const res = await fetch('/api-keys', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name, scopes: ['read', 'write'] })
+        });
+        const data = await res.json();
+        if (data.key) {
+          document.getElementById('new-key-value').textContent = data.key;
+          document.getElementById('new-key-result').style.display = 'block';
+          document.getElementById('name').value = '';
+          setTimeout(() => location.reload(), 3000);
+        } else {
+          alert(data.error || 'Failed to create key');
+        }
+      } catch (err) {
+        alert('Failed to create API key');
+      }
+    });
+
+    async function deleteKey(id) {
+      if (!confirm('Delete this API key? This cannot be undone.')) return;
+      await fetch('/api-keys/' + id, { method: 'DELETE', credentials: 'include' });
+      location.reload();
+    }
+
+    async function toggleKey(id) {
+      await fetch('/api-keys/' + id, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: true }) });
+      location.reload();
+    }
+  </script>
+</body>
+</html>`;
+
+  return c.html(html);
+});
+
 app.get('/service-account/list', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -886,7 +1049,7 @@ app.get('/service-account/list', async (c) => {
 
 app.delete('/service-account/:account_id', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -928,7 +1091,7 @@ app.delete('/service-account/:account_id', async (c) => {
 
 app.post('/service-account/:account_id/toggle', async (c) => {
   const sessionId = c.req.header('Authorization')?.split(' ')[1];
-  
+
   if (!sessionId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
@@ -975,13 +1138,13 @@ async function generateApiKey(): Promise<{ key: string; prefix: string; hash: st
   const randomBytes = crypto.getRandomValues(new Uint8Array(24));
   const key = 'xk_' + Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
   const prefix = key.slice(0, 11); // "xk_" + first 8 hex chars
-  
+
   // Hash the full key for storage
   const encoder = new TextEncoder();
   const data = encoder.encode(key);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-  
+
   return { key, prefix, hash };
 }
 
@@ -1007,7 +1170,7 @@ app.post('/api-keys', async (c) => {
 
     const body = await c.req.json().catch(() => ({}));
     const { name, scopes, rate_limit, expires_in_days, allowed_ips } = body;
-    
+
     if (!name || typeof name !== 'string' || name.length < 1 || name.length > 64) {
       return c.json({ error: 'Name required (1-64 characters)' }, 400);
     }
@@ -1099,7 +1262,7 @@ app.get('/api-keys', async (c) => {
       ORDER BY created_at DESC
     `).bind(user.id).all();
 
-    return c.json({ 
+    return c.json({
       keys: keys.results?.map((k: any) => ({
         ...k,
         scopes: JSON.parse(k.scopes || '[]'),
@@ -1178,7 +1341,7 @@ app.patch('/api-keys/:key_id', async (c) => {
 app.post('/verify-api-key', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const { apiKey } = body;
-  
+
   if (!apiKey || typeof apiKey !== 'string' || !apiKey.startsWith('xk_')) {
     return c.json({ valid: false, error: 'Invalid API key format' }, 400);
   }
