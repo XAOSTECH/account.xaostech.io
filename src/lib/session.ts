@@ -3,16 +3,27 @@
  */
 
 export interface SessionUser {
-    user_id: string;
+    id?: string;        // API worker uses 'id'
+    user_id?: string;   // Legacy field
+    userId?: string;    // API worker also uses 'userId'
     username: string;
     email: string;
     role: string;
     avatar_url?: string;
-    created: number;
+    created?: number;
     expires: number;
     isNewUser?: boolean;
     github_id?: string;
     github_username?: string;
+}
+
+// Normalize session data to have consistent 'id' field
+function normalizeSession(parsed: any): SessionUser {
+    return {
+        ...parsed,
+        id: parsed.id || parsed.user_id || parsed.userId,
+        user_id: parsed.id || parsed.user_id || parsed.userId,
+    };
 }
 
 export async function getSession(
@@ -25,14 +36,14 @@ export async function getSession(
         const sessionData = await sessionsKv.get(sessionId);
         if (!sessionData) return null;
 
-        const parsed = JSON.parse(sessionData) as SessionUser;
+        const parsed = JSON.parse(sessionData);
         if (parsed.expires && parsed.expires < Date.now()) {
             // Session expired
             await sessionsKv.delete(sessionId);
             return null;
         }
 
-        return parsed;
+        return normalizeSession(parsed);
     } catch (e) {
         console.error('Session read error:', e);
         return null;
