@@ -1,24 +1,88 @@
 /**
  * Shared CSS styles for account.xaostech.io
- * Extracted from the original monolithic worker
+ * Includes light/dark theme support controlled by bubble.js
  */
 export const styles = `
+/* =============================================================================
+   DARK THEME (Default)
+   ============================================================================= */
 :root {
   --primary: #f6821f;
   --primary-dark: #e65100;
-  --secondary: #3b82f6;
+  --primary-light: #ff9d4d;
+  --secondary: #00d4ff;
+  --secondary-dark: #0099cc;
   --bg: #0a0a0a;
-  --bg-card: #1a1a1a;
-  --bg-input: #2a2a2a;
-  --border: #333;
+  --bg-surface: #121218;
+  --bg-card: #1a1a2e;
+  --bg-elevated: #252538;
+  --bg-input: #2a2a3a;
+  --border: #333344;
+  --border-subtle: #222233;
   --text: #e0e0e0;
+  --text-primary: #ffffff;
   --text-muted: #888;
   --success: #22c55e;
   --danger: #ef4444;
   --warning: #f59e0b;
   --info: #3b82f6;
+  --shadow-glow: 0 0 20px rgba(0, 212, 255, 0.15);
+  --transition-normal: 0.25s ease;
 }
 
+/* =============================================================================
+   LIGHT THEME
+   ============================================================================= */
+[data-theme="light"],
+body.light-theme {
+  --primary: #e65100;
+  --primary-dark: #bf4500;
+  --primary-light: #f6821f;
+  --secondary: #0099cc;
+  --secondary-dark: #007399;
+  --bg: #f5f5f7;
+  --bg-surface: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #f0f0f2;
+  --border: #dddddd;
+  --border-subtle: #eeeeee;
+  --text: #333333;
+  --text-primary: #1a1a1a;
+  --text-muted: #666666;
+  --shadow-glow: 0 0 20px rgba(0, 153, 204, 0.1);
+}
+
+/* Light theme specific overrides */
+body.light-theme .card,
+[data-theme="light"] .card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+body.light-theme header,
+[data-theme="light"] header {
+  background: var(--bg-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+body.light-theme .badge-owner,
+[data-theme="light"] .badge-owner {
+  background: linear-gradient(135deg, #e65100, #bf4500);
+}
+
+body.light-theme .nav-link:hover,
+[data-theme="light"] .nav-link:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme .welcome-banner,
+[data-theme="light"] .welcome-banner {
+  background: linear-gradient(135deg, rgba(230, 81, 0, 0.1), rgba(191, 69, 0, 0.05));
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -31,6 +95,7 @@ body {
   color: var(--text);
   min-height: 100vh;
   line-height: 1.6;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 a {
