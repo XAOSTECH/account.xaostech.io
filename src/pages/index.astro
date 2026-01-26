@@ -1,14 +1,23 @@
 ---
 /**
  * Account Dashboard (Home Page)
- * Shows user info and navigation for authenticated users
- * Shows login prompt for unauthenticated users
+ * 
+ * Shows user info and navigation for authenticated users.
+ * Auto-redirects to GitHub OAuth for unauthenticated users (seamless SSO).
+ * 
+ * Add ?prompt=login to force showing the welcome page with options.
  */
 import Base from '../layouts/Base.astro';
 import UserCard from '../components/UserCard.astro';
 import NavGrid from '../components/NavGrid.astro';
 
 const user = Astro.locals.user;
+const prompt = Astro.url.searchParams.get('prompt');
+
+// Auto-redirect to GitHub OAuth for seamless SSO (unless user wants to see options)
+if (!user && prompt !== 'login') {
+  return Astro.redirect('/api/auth/github/login?return_to=/');
+}
 ---
 <Base title={user ? 'Dashboard' : 'Welcome'}>
   {user ? (
@@ -25,15 +34,12 @@ const user = Astro.locals.user;
           Manage your account, API keys, and family settings.
         </p>
         <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
-          <a href="/login" class="btn-primary" style="display:inline-block;padding:0.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:600">
-            Sign In
-          </a>
-          <a href="/register" class="btn-secondary" style="display:inline-block;padding:0.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:600;border:1px solid var(--border)">
-            Create Account
+          <a href="/login?method=password" class="btn-secondary" style="display:inline-block;padding:0.75rem 2rem;border-radius:8px;text-decoration:none;font-weight:600;border:1px solid var(--border)">
+            Email &amp; Password
           </a>
         </div>
         <div style="margin-top:2rem;padding-top:2rem;border-top:1px solid var(--border)">
-          <p style="color:var(--text-muted);font-size:0.875rem">Or sign in with</p>
+          <p style="color:var(--text-muted);font-size:0.875rem">Recommended</p>
           <a href="/api/auth/github/login" 
              class="github-btn" 
              style="display:inline-flex;align-items:center;gap:0.5rem;margin-top:1rem;padding:0.75rem 1.5rem;background:#24292e;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">
