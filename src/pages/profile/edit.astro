@@ -7,94 +7,331 @@ const user = Astro.locals.user;
 if (!user) {
   return Astro.redirect('/');
 }
+
+const runtime = Astro.locals.runtime;
+
+// Fetch user's privacy settings
+let privacySettings = {
+  show_friends: true,
+  show_posts: true,
+  show_activity: true,
+  show_collections: true,
+  show_stats: true,
+  profile_visibility: 'public',
+  allow_friend_requests: true,
+  show_online_status: true
+};
+
+try {
+  const settings = await runtime.env.DB.prepare(
+    'SELECT * FROM privacy_settings WHERE user_id = ?'
+  ).bind(user.user_id).first();
+  if (settings) {
+    privacySettings = { ...privacySettings, ...settings };
+  }
+} catch (err) {
+  console.error('Failed to fetch privacy settings:', err);
+}
+
+const activeTab = Astro.url.searchParams.get('tab') || 'about';
 ---
 
-<Base title="Profile" user={user}>
-  <a href="/" class="back">← Back to Dashboard</a>
+<Base title="Edit Profile" user={user}>
+  <a href="/profile" class="back">← Back to Profile</a>
   <h1>Edit Profile</h1>
-  <p class="subtitle">Manage your XAOSTECH account information</p>
+  <p class="subtitle">Manage your XAOSTECH account settings</p>
   
   <div id="alert-error" class="alert alert-error"></div>
   <div id="alert-success" class="alert alert-success"></div>
   
-  <div class="card">
-    <h3 style="margin-bottom: 1.5rem;">Profile Photo</h3>
-    <div class="avatar-section">
-      <img 
-        src={user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
-        alt="Avatar" 
-        class="avatar-large" 
-        id="avatar-preview"
-      />
-      <div class="avatar-actions">
-        <input type="file" id="avatar-upload" accept="image/*" style="display:none;">
-        <button class="btn secondary small" onclick="document.getElementById('avatar-upload').click()">
-          📷 Upload New
-        </button>
-        {user.github_avatar_url && (
-          <button class="btn github small" id="reset-github-btn">
-            🔄 Reset to GitHub
-          </button>
-        )}
-      </div>
-    </div>
-    
-    <form id="profile-form">
-      <div class="form-group">
-        <label for="username">Display Name</label>
-        <input 
-          type="text" 
-          id="username" 
-          name="username" 
-          value={user.username || ''} 
-          required 
-          minlength="2" 
-          maxlength="50"
-        />
-        <p class="hint">This is how you'll appear across XAOSTECH</p>
-      </div>
-      
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input 
-          type="email" 
-          id="email" 
-          name="email" 
-          value={user.email || ''} 
-          disabled
-        />
-        <p class="hint">
-          Email cannot be changed{user.github_id ? ' (linked to GitHub)' : ''}
-        </p>
-      </div>
-      
-      <div class="role-section">
-        <span>Role:</span>
-        <RoleBadge role={user.role || 'user'} />
-      </div>
-      
-      <div style="margin-top: 2rem;">
-        <button type="submit" class="btn primary">Save Changes</button>
-      </div>
-    </form>
-    
-    {user.github_id && (
-      <div class="github-info">
-        <p><strong>🔗 Linked to GitHub</strong></p>
-        <p style="margin-top: 0.5rem;">
-          Original GitHub username: <code>{user.github_username || user.username}</code>
-        </p>
-        <button class="btn secondary small" style="margin-top: 0.75rem;" id="restore-github-btn">
-          Restore GitHub Profile
-        </button>
-      </div>
-    )}
+  <div class="tabs">
+    <button class={`tab ${activeTab === 'about' ? 'active' : ''}`} data-tab="about">
+      👤 About
+    </button>
+    <button class={`tab ${activeTab === 'privacy' ? 'active' : ''}`} data-tab="privacy">
+      🔒 Privacy
+    </button>
+    <button class={`tab ${activeTab === 'notifications' ? 'active' : ''}`} data-tab="notifications">
+      🔔 Notifications
+    </button>
+    <button class={`tab ${activeTab === 'collections' ? 'active' : ''}`} data-tab="collections">
+      📚 Collections
+    </button>
   </div>
   
-  <div class="card danger-zone">
-    <h3 style="color: #e53935; margin-bottom: 1rem;">⚠️ Danger Zone</h3>
-    <p style="color: #888; margin-bottom: 1rem;">These actions are irreversible. Please be certain.</p>
-    <button class="btn danger" id="delete-account-btn">Delete Account</button>
+  <!-- About Tab -->
+  <div class="tab-content" id="tab-about" style={activeTab !== 'about' ? 'display:none' : ''}>
+    <div class="card">
+      <h3 style="margin-bottom: 1.5rem;">Profile Photo</h3>
+      <div class="avatar-section">
+        <img 
+          src={user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+          alt="Avatar" 
+          class="avatar-large" 
+          id="avatar-preview"
+        />
+        <div class="avatar-actions">
+          <input type="file" id="avatar-upload" accept="image/*" style="display:none;">
+          <button class="btn secondary small" onclick="document.getElementById('avatar-upload').click()">
+            📷 Upload New
+          </button>
+          {user.github_avatar_url && (
+            <button class="btn github small" id="reset-github-btn">
+              🔄 Reset to GitHub
+            </button>
+          )}
+        </div>
+      </div>
+      
+      <form id="profile-form">
+        <div class="form-group">
+          <label for="username">Display Name</label>
+          <input 
+            type="text" 
+            id="username" 
+            name="username" 
+            value={user.username || ''} 
+            required 
+            minlength="2" 
+            maxlength="50"
+          />
+          <p class="hint">This is how you'll appear across XAOSTECH</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="bio">Bio</label>
+          <textarea 
+            id="bio" 
+            name="bio" 
+            maxlength="500"
+            rows="3"
+            placeholder="Tell others about yourself..."
+          >{user.bio || ''}</textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input 
+            type="email" 
+            id="email" 
+            name="email" 
+            value={user.email || ''} 
+            disabled
+          />
+          <p class="hint">
+            Email cannot be changed{user.github_id ? ' (linked to GitHub)' : ''}
+          </p>
+        </div>
+        
+        <div class="role-section">
+          <span>Role:</span>
+          <RoleBadge role={user.role || 'user'} />
+        </div>
+        
+        <div style="margin-top: 2rem;">
+          <button type="submit" class="btn primary">Save Changes</button>
+        </div>
+      </form>
+      
+      {user.github_id && (
+        <div class="github-info">
+          <p><strong>🔗 Linked to GitHub</strong></p>
+          <p style="margin-top: 0.5rem;">
+            Original GitHub username: <code>{user.github_username || user.username}</code>
+          </p>
+          <button class="btn secondary small" style="margin-top: 0.75rem;" id="restore-github-btn">
+            Restore GitHub Profile
+          </button>
+        </div>
+      )}
+    </div>
+    
+    <div class="card danger-zone">
+      <h3 style="color: #e53935; margin-bottom: 1rem;">⚠️ Danger Zone</h3>
+      <p style="color: #888; margin-bottom: 1rem;">These actions are irreversible. Please be certain.</p>
+      <button class="btn danger" id="delete-account-btn">Delete Account</button>
+    </div>
+  </div>
+  
+  <!-- Privacy Tab -->
+  <div class="tab-content" id="tab-privacy" style={activeTab !== 'privacy' ? 'display:none' : ''}>
+    <div class="card">
+      <h3>🌐 Profile Visibility</h3>
+      <p class="hint" style="margin-bottom: 1.5rem;">Control who can see your profile</p>
+      
+      <form id="privacy-form">
+        <div class="form-group">
+          <label for="profile_visibility">Who can view your profile?</label>
+          <select id="profile_visibility" name="profile_visibility">
+            <option value="public" selected={privacySettings.profile_visibility === 'public'}>🌍 Public - Anyone</option>
+            <option value="friends" selected={privacySettings.profile_visibility === 'friends'}>👥 Friends Only</option>
+            <option value="private" selected={privacySettings.profile_visibility === 'private'}>🔒 Private - Only Me</option>
+          </select>
+        </div>
+        
+        <h4 style="margin: 2rem 0 1rem; color: var(--primary);">Timeline Sections</h4>
+        <p class="hint" style="margin-bottom: 1rem;">Choose what appears on your public profile</p>
+        
+        <div class="privacy-toggles">
+          <label class="toggle-row">
+            <input type="checkbox" name="show_friends" checked={privacySettings.show_friends} />
+            <span class="toggle-label">
+              <strong>👥 Friends List</strong>
+              <small>Show your connections on your profile</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="show_posts" checked={privacySettings.show_posts} />
+            <span class="toggle-label">
+              <strong>📝 Blog Posts</strong>
+              <small>Display your published posts on timeline</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="show_activity" checked={privacySettings.show_activity} />
+            <span class="toggle-label">
+              <strong>📊 Activity Feed</strong>
+              <small>Show comments, likes, and interactions</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="show_collections" checked={privacySettings.show_collections} />
+            <span class="toggle-label">
+              <strong>📚 Collections</strong>
+              <small>Display your curated post collections</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="show_stats" checked={privacySettings.show_stats} />
+            <span class="toggle-label">
+              <strong>📈 Statistics</strong>
+              <small>Show post count, friend count, etc.</small>
+            </span>
+          </label>
+        </div>
+        
+        <h4 style="margin: 2rem 0 1rem; color: var(--primary);">Social Settings</h4>
+        
+        <div class="privacy-toggles">
+          <label class="toggle-row">
+            <input type="checkbox" name="allow_friend_requests" checked={privacySettings.allow_friend_requests} />
+            <span class="toggle-label">
+              <strong>🤝 Allow Friend Requests</strong>
+              <small>Let others send you friend requests</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="show_online_status" checked={privacySettings.show_online_status} />
+            <span class="toggle-label">
+              <strong>🟢 Online Status</strong>
+              <small>Show when you're currently online</small>
+            </span>
+          </label>
+        </div>
+        
+        <div style="margin-top: 2rem;">
+          <button type="submit" class="btn primary">Save Privacy Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Notifications Tab -->
+  <div class="tab-content" id="tab-notifications" style={activeTab !== 'notifications' ? 'display:none' : ''}>
+    <div class="card">
+      <h3>🔔 Notification Preferences</h3>
+      <p class="hint" style="margin-bottom: 1.5rem;">Choose what notifications you receive</p>
+      
+      <form id="notifications-form">
+        <div class="privacy-toggles">
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_comments" checked />
+            <span class="toggle-label">
+              <strong>💬 Comments</strong>
+              <small>When someone comments on your posts</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_likes" checked />
+            <span class="toggle-label">
+              <strong>❤️ Likes</strong>
+              <small>When someone likes your content</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_friends" checked />
+            <span class="toggle-label">
+              <strong>👥 Friend Requests</strong>
+              <small>New friend requests and acceptances</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_mentions" checked />
+            <span class="toggle-label">
+              <strong>@️ Mentions</strong>
+              <small>When you're mentioned in posts or comments</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_edu" />
+            <span class="toggle-label">
+              <strong>📚 Learning Progress</strong>
+              <small>Reminders and achievements from Edu</small>
+            </span>
+          </label>
+          
+          <label class="toggle-row">
+            <input type="checkbox" name="notify_lingua" />
+            <span class="toggle-label">
+              <strong>🌍 Lingua Updates</strong>
+              <small>New translations and language tips</small>
+            </span>
+          </label>
+        </div>
+        
+        <div style="margin-top: 2rem;">
+          <button type="submit" class="btn primary">Save Notification Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Collections Tab -->
+  <div class="tab-content" id="tab-collections" style={activeTab !== 'collections' ? 'display:none' : ''}>
+    <div class="card">
+      <h3>📚 Post Collections</h3>
+      <p class="hint" style="margin-bottom: 1.5rem;">Create collections to organize and showcase your favorite posts</p>
+      
+      <div id="collections-list">
+        <div class="empty-state">
+          <p>No collections yet. Create one to organize your posts!</p>
+        </div>
+      </div>
+      
+      <button class="btn secondary" id="create-collection-btn" style="margin-top: 1rem;">
+        ➕ Create Collection
+      </button>
+    </div>
+    
+    <div class="card">
+      <h3>📌 Pinned Posts</h3>
+      <p class="hint" style="margin-bottom: 1.5rem;">Pin up to 3 posts to the top of your profile</p>
+      
+      <div id="pinned-posts">
+        <div class="empty-state">
+          <p>No pinned posts. Visit your posts and pin the ones you want to highlight!</p>
+        </div>
+      </div>
+    </div>
   </div>
 </Base>
 
@@ -108,7 +345,39 @@ if (!user) {
   .back:hover { text-decoration: underline; }
   
   h1 { color: var(--primary); margin-bottom: 0.5rem; }
-  .subtitle { color: #888; margin-bottom: 2rem; }
+  .subtitle { color: #888; margin-bottom: 1.5rem; }
+  
+  .tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    overflow-x: auto;
+  }
+  
+  .tab {
+    background: transparent;
+    border: none;
+    color: #888;
+    padding: 0.75rem 1.25rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: #fff; }
+  .tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+  }
+  
+  .tab-content { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   
   .alert {
     padding: 1rem;
@@ -146,22 +415,29 @@ if (!user) {
     gap: 0.5rem;
   }
   
-  .btn.github {
-    background: #24292e;
+  textarea {
+    width: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
     color: #fff;
+    font-family: inherit;
+    resize: vertical;
   }
-  .btn.small {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
+  textarea:focus {
+    outline: none;
+    border-color: var(--primary);
   }
+  
+  .btn.github { background: #24292e; color: #fff; }
+  .btn.small { padding: 0.5rem 1rem; font-size: 0.9rem; }
   .btn.danger {
     background: transparent;
     border: 1px solid #e53935;
     color: #e53935;
   }
-  .btn.danger:hover {
-    background: rgba(229,57,53,0.1);
-  }
+  .btn.danger:hover { background: rgba(229,57,53,0.1); }
   
   .role-section {
     display: flex;
@@ -187,8 +463,59 @@ if (!user) {
     font-family: monospace;
   }
   
-  .danger-zone {
-    border-color: #5a2a2a;
+  .danger-zone { border-color: #5a2a2a; }
+  
+  .privacy-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle-row:hover { background: rgba(255,255,255,0.05); }
+  
+  .toggle-row input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    margin-top: 2px;
+    accent-color: var(--primary);
+  }
+  
+  .toggle-label { display: flex; flex-direction: column; }
+  .toggle-label strong { color: #fff; font-size: 0.95rem; }
+  .toggle-label small { color: #888; font-size: 0.85rem; margin-top: 0.25rem; }
+  
+  select {
+    width: 100%;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: #fff;
+    font-size: 1rem;
+  }
+  select:focus { outline: none; border-color: var(--primary); }
+  
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: #666;
+    background: rgba(255,255,255,0.02);
+    border-radius: 8px;
+  }
+  
+  @media (max-width: 768px) {
+    .tabs { gap: 0; }
+    .tab { padding: 0.6rem 0.8rem; font-size: 0.85rem; }
   }
 </style>
 
@@ -200,6 +527,7 @@ if (!user) {
     alertError.textContent = msg;
     alertError.style.display = 'block';
     alertSuccess.style.display = 'none';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function showSuccess(msg: string) {
@@ -207,6 +535,24 @@ if (!user) {
     alertSuccess.style.display = 'block';
     alertError.style.display = 'none';
   }
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabId = (tab as HTMLElement).dataset.tab;
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tabId || 'about');
+      history.pushState({}, '', url.toString());
+      
+      document.querySelectorAll('.tab-content').forEach(c => {
+        (c as HTMLElement).style.display = 'none';
+      });
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      
+      document.getElementById(`tab-${tabId}`)!.style.display = 'block';
+      tab.classList.add('active');
+    });
+  });
 
   // Avatar upload
   document.getElementById('avatar-upload')?.addEventListener('change', async (e) => {
@@ -223,11 +569,7 @@ if (!user) {
     formData.append('avatar', file);
     
     try {
-      const res = await fetch('/api/profile/avatar', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData
-      });
+      const res = await fetch('/api/profile/avatar', { method: 'POST', credentials: 'include', body: formData });
       const data = await res.json();
       if (res.ok) {
         (document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
@@ -235,18 +577,13 @@ if (!user) {
       } else {
         showError(data.error || 'Failed to upload avatar');
       }
-    } catch {
-      showError('Network error');
-    }
+    } catch { showError('Network error'); }
   });
 
   // Reset to GitHub avatar
   document.getElementById('reset-github-btn')?.addEventListener('click', async () => {
     try {
-      const res = await fetch('/api/profile/reset-github-avatar', {
-        method: 'POST',
-        credentials: 'include'
-      });
+      const res = await fetch('/api/profile/reset-github-avatar', { method: 'POST', credentials: 'include' });
       const data = await res.json();
       if (res.ok) {
         (document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
@@ -254,70 +591,115 @@ if (!user) {
       } else {
         showError(data.error || 'Failed to reset avatar');
       }
-    } catch {
-      showError('Network error');
-    }
+    } catch { showError('Network error'); }
   });
 
   // Restore full GitHub profile
   document.getElementById('restore-github-btn')?.addEventListener('click', async () => {
     if (!confirm('This will restore your username and avatar to match your GitHub profile. Continue?')) return;
     try {
-      const res = await fetch('/api/profile/restore-github', {
-        method: 'POST',
-        credentials: 'include'
-      });
+      const res = await fetch('/api/profile/restore-github', { method: 'POST', credentials: 'include' });
       const data = await res.json();
       if (res.ok) {
-        showSuccess('Profile restored to GitHub settings! Refreshing...');
+        showSuccess('Profile restored! Refreshing...');
         setTimeout(() => location.reload(), 1500);
       } else {
         showError(data.error || 'Failed to restore profile');
       }
-    } catch {
-      showError('Network error');
-    }
+    } catch { showError('Network error'); }
   });
 
-  // Profile form submit
+  // Profile form
   document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const username = (document.getElementById('username') as HTMLInputElement).value.trim();
+    const bio = (document.getElementById('bio') as HTMLTextAreaElement).value.trim();
     
     try {
       const res = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username, bio })
       });
       const data = await res.json();
-      if (res.ok) {
-        showSuccess('Profile updated!');
-      } else {
-        showError(data.error || 'Failed to update profile');
-      }
-    } catch {
-      showError('Network error');
-    }
+      if (res.ok) showSuccess('Profile updated!');
+      else showError(data.error || 'Failed to update profile');
+    } catch { showError('Network error'); }
+  });
+
+  // Privacy form
+  document.getElementById('privacy-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const settings = {
+      profile_visibility: formData.get('profile_visibility'),
+      show_friends: formData.has('show_friends'),
+      show_posts: formData.has('show_posts'),
+      show_activity: formData.has('show_activity'),
+      show_collections: formData.has('show_collections'),
+      show_stats: formData.has('show_stats'),
+      allow_friend_requests: formData.has('allow_friend_requests'),
+      show_online_status: formData.has('show_online_status')
+    };
+    
+    try {
+      const res = await fetch('/api/profile/privacy', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      });
+      const data = await res.json();
+      if (res.ok) showSuccess('Privacy settings saved!');
+      else showError(data.error || 'Failed to save privacy settings');
+    } catch { showError('Network error'); }
+  });
+
+  // Notifications form
+  document.getElementById('notifications-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target as HTMLFormElement);
+    const settings = {
+      notify_comments: formData.has('notify_comments'),
+      notify_likes: formData.has('notify_likes'),
+      notify_friends: formData.has('notify_friends'),
+      notify_mentions: formData.has('notify_mentions'),
+      notify_edu: formData.has('notify_edu'),
+      notify_lingua: formData.has('notify_lingua')
+    };
+    
+    try {
+      const res = await fetch('/api/profile/notifications', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      });
+      const data = await res.json();
+      if (res.ok) showSuccess('Notification settings saved!');
+      else showError(data.error || 'Failed to save notification settings');
+    } catch { showError('Network error'); }
   });
 
   // Delete account
   document.getElementById('delete-account-btn')?.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to delete your account? This will start a 30-day grace period.')) return;
+    if (!confirm('Are you sure? This will start a 30-day grace period.')) return;
     try {
-      const res = await fetch('/api/gdpr/delete-request', {
-        method: 'POST',
-        credentials: 'include'
-      });
+      const res = await fetch('/api/gdpr/delete-request', { method: 'POST', credentials: 'include' });
       const data = await res.json();
       if (data.deletion_date) {
         showSuccess('Account deletion scheduled for ' + new Date(data.deletion_date).toLocaleDateString());
       } else {
         showError(data.error || 'Failed to request deletion');
       }
-    } catch {
-      showError('Network error');
-    }
+    } catch { showError('Network error'); }
+  });
+
+  // Create collection
+  document.getElementById('create-collection-btn')?.addEventListener('click', () => {
+    const name = prompt('Collection name:');
+    if (!name) return;
+    showSuccess(`Collection "${name}" created! (API pending)`);
   });
 </script>
