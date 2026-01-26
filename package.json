@@ -1,17 +1,22 @@
 {
   "name": "xaostech-account",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
-    "build": "echo 'no build required for account.xaostech.io'",
-    "deploy": "wrangler deploy --env production"
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "deploy": "npm run build && wrangler deploy --env production"
   },
   "dependencies": {
-    "hono": "latest"
+    "astro": "latest",
+    "@astrojs/cloudflare": "latest",
+    "hono": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "wrangler": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "@types/node": "latest"
   }
 }

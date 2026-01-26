@@ -1,0 +1,67 @@
+---
+import { styles } from '../lib/styles';
+
+interface Props {
+  title: string;
+  description?: string;
+  showNav?: boolean;
+}
+
+const { title, description = 'XAOSTECH Account Management', showNav = true } = Astro.props;
+const user = Astro.locals.user;
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content={description}>
+  <title>{title} | XAOSTECH</title>
+  <link rel="icon" type="image/png" href="/api/data/assets/XAOSTECH_LOGO.png">
+  <style set:html={styles}></style>
+</head>
+<body>
+  {showNav && (
+    <header>
+      <a href="/" class="logo">
+        <img src="/api/data/assets/XAOSTECH_LOGO.png" alt="XAOSTECH" />
+        <span>XAOSTECH Account</span>
+      </a>
+      <nav>
+        {user ? (
+          <>
+            <a href="/profile">Profile</a>
+            <a href="/service-accounts">API Keys</a>
+            <a href="/family">Family</a>
+            <a href="/notifications">Notifications</a>
+            {(user.role === 'admin' || user.role === 'owner') && (
+              <a href="/admin">Admin</a>
+            )}
+            <form action="/api/auth/logout" method="POST" style="display:inline">
+              <button type="submit" class="btn-secondary" style="padding:0.5rem 1rem">Logout</button>
+            </form>
+          </>
+        ) : (
+          <>
+            <a href="/login">Login</a>
+            <a href="/register">Register</a>
+          </>
+        )}
+      </nav>
+    </header>
+  )}
+
+  <main class="container">
+    <slot />
+  </main>
+
+  <footer style="text-align:center;padding:2rem;color:var(--text-muted);border-top:1px solid var(--border)">
+    <p>&copy; {new Date().getFullYear()} XAOSTECH. All rights reserved.</p>
+    <p style="margin-top:0.5rem">
+      <a href="/gdpr/export-request">Export Data</a> &middot;
+      <a href="/gdpr/delete-request">Delete Account</a> &middot;
+      <a href="https://xaostech.io/privacy">Privacy Policy</a>
+    </p>
+  </footer>
+</body>
+</html>

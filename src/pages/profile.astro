@@ -1,0 +1,323 @@
+---
+import Base from '../layouts/Base.astro';
+import RoleBadge from '../components/RoleBadge.astro';
+
+const user = Astro.locals.user;
+
+if (!user) {
+  return Astro.redirect('/');
+}
+---
+
+<Base title="Profile" user={user}>
+  <a href="/" class="back">← Back to Dashboard</a>
+  <h1>Edit Profile</h1>
+  <p class="subtitle">Manage your XAOSTECH account information</p>
+  
+  <div id="alert-error" class="alert alert-error"></div>
+  <div id="alert-success" class="alert alert-success"></div>
+  
+  <div class="card">
+    <h3 style="margin-bottom: 1.5rem;">Profile Photo</h3>
+    <div class="avatar-section">
+      <img 
+        src={user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+        alt="Avatar" 
+        class="avatar-large" 
+        id="avatar-preview"
+      />
+      <div class="avatar-actions">
+        <input type="file" id="avatar-upload" accept="image/*" style="display:none;">
+        <button class="btn secondary small" onclick="document.getElementById('avatar-upload').click()">
+          📷 Upload New
+        </button>
+        {user.github_avatar_url && (
+          <button class="btn github small" id="reset-github-btn">
+            🔄 Reset to GitHub
+          </button>
+        )}
+      </div>
+    </div>
+    
+    <form id="profile-form">
+      <div class="form-group">
+        <label for="username">Display Name</label>
+        <input 
+          type="text" 
+          id="username" 
+          name="username" 
+          value={user.username || ''} 
+          required 
+          minlength="2" 
+          maxlength="50"
+        />
+        <p class="hint">This is how you'll appear across XAOSTECH</p>
+      </div>
+      
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input 
+          type="email" 
+          id="email" 
+          name="email" 
+          value={user.email || ''} 
+          disabled
+        />
+        <p class="hint">
+          Email cannot be changed{user.github_id ? ' (linked to GitHub)' : ''}
+        </p>
+      </div>
+      
+      <div class="role-section">
+        <span>Role:</span>
+        <RoleBadge role={user.role || 'user'} />
+      </div>
+      
+      <div style="margin-top: 2rem;">
+        <button type="submit" class="btn primary">Save Changes</button>
+      </div>
+    </form>
+    
+    {user.github_id && (
+      <div class="github-info">
+        <p><strong>🔗 Linked to GitHub</strong></p>
+        <p style="margin-top: 0.5rem;">
+          Original GitHub username: <code>{user.github_username || user.username}</code>
+        </p>
+        <button class="btn secondary small" style="margin-top: 0.75rem;" id="restore-github-btn">
+          Restore GitHub Profile
+        </button>
+      </div>
+    )}
+  </div>
+  
+  <div class="card danger-zone">
+    <h3 style="color: #e53935; margin-bottom: 1rem;">⚠️ Danger Zone</h3>
+    <p style="color: #888; margin-bottom: 1rem;">These actions are irreversible. Please be certain.</p>
+    <button class="btn danger" id="delete-account-btn">Delete Account</button>
+  </div>
+</Base>
+
+<style>
+  .back {
+    color: var(--primary);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .back:hover { text-decoration: underline; }
+  
+  h1 { color: var(--primary); margin-bottom: 0.5rem; }
+  .subtitle { color: #888; margin-bottom: 2rem; }
+  
+  .alert {
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    display: none;
+  }
+  .alert-error {
+    background: rgba(229,57,53,0.1);
+    border: 1px solid var(--error);
+    color: var(--error);
+  }
+  .alert-success {
+    background: rgba(67,160,71,0.1);
+    border: 1px solid var(--success);
+    color: var(--success);
+  }
+  
+  .avatar-section {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+  .avatar-large {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 3px solid var(--primary);
+    object-fit: cover;
+  }
+  .avatar-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .btn.github {
+    background: #24292e;
+    color: #fff;
+  }
+  .btn.small {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  .btn.danger {
+    background: transparent;
+    border: 1px solid #e53935;
+    color: #e53935;
+  }
+  .btn.danger:hover {
+    background: rgba(229,57,53,0.1);
+  }
+  
+  .role-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+  }
+  
+  .github-info {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+  }
+  .github-info p { color: #8b949e; font-size: 0.9rem; }
+  .github-info code {
+    background: #161b22;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+  
+  .danger-zone {
+    border-color: #5a2a2a;
+  }
+</style>
+
+<script>
+  const alertError = document.getElementById('alert-error') as HTMLElement;
+  const alertSuccess = document.getElementById('alert-success') as HTMLElement;
+
+  function showError(msg: string) {
+    alertError.textContent = msg;
+    alertError.style.display = 'block';
+    alertSuccess.style.display = 'none';
+  }
+
+  function showSuccess(msg: string) {
+    alertSuccess.textContent = msg;
+    alertSuccess.style.display = 'block';
+    alertError.style.display = 'none';
+  }
+
+  // Avatar upload
+  document.getElementById('avatar-upload')?.addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      showError('Image must be smaller than 2MB');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    try {
+      const res = await fetch('/api/profile/avatar', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      const data = await res.json();
+      if (res.ok) {
+        (document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
+        showSuccess('Avatar updated!');
+      } else {
+        showError(data.error || 'Failed to upload avatar');
+      }
+    } catch {
+      showError('Network error');
+    }
+  });
+
+  // Reset to GitHub avatar
+  document.getElementById('reset-github-btn')?.addEventListener('click', async () => {
+    try {
+      const res = await fetch('/api/profile/reset-github-avatar', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        (document.getElementById('avatar-preview') as HTMLImageElement).src = data.avatar_url;
+        showSuccess('Avatar reset to GitHub!');
+      } else {
+        showError(data.error || 'Failed to reset avatar');
+      }
+    } catch {
+      showError('Network error');
+    }
+  });
+
+  // Restore full GitHub profile
+  document.getElementById('restore-github-btn')?.addEventListener('click', async () => {
+    if (!confirm('This will restore your username and avatar to match your GitHub profile. Continue?')) return;
+    try {
+      const res = await fetch('/api/profile/restore-github', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showSuccess('Profile restored to GitHub settings! Refreshing...');
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        showError(data.error || 'Failed to restore profile');
+      }
+    } catch {
+      showError('Network error');
+    }
+  });
+
+  // Profile form submit
+  document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = (document.getElementById('username') as HTMLInputElement).value.trim();
+    
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showSuccess('Profile updated!');
+      } else {
+        showError(data.error || 'Failed to update profile');
+      }
+    } catch {
+      showError('Network error');
+    }
+  });
+
+  // Delete account
+  document.getElementById('delete-account-btn')?.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to delete your account? This will start a 30-day grace period.')) return;
+    try {
+      const res = await fetch('/api/gdpr/delete-request', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await res.json();
+      if (data.deletion_date) {
+        showSuccess('Account deletion scheduled for ' + new Date(data.deletion_date).toLocaleDateString());
+      } else {
+        showError(data.error || 'Failed to request deletion');
+      }
+    } catch {
+      showError('Network error');
+    }
+  });
+</script>

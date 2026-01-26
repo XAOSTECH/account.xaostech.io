@@ -1,0 +1,83 @@
+---
+/**
+ * User card component for displaying logged-in user info
+ */
+import RoleBadge from './RoleBadge.astro';
+import type { SessionUser } from '../lib/session';
+
+interface Props {
+  user: SessionUser;
+  showWelcome?: boolean;
+}
+
+const { user, showWelcome = false } = Astro.props;
+---
+<div class="user-card">
+  <img 
+    src={user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+    alt="Avatar" 
+    class="avatar"
+  />
+  <div class="user-info">
+    <h2>
+      {user.username || 'User'}
+      <RoleBadge role={user.role || 'user'} />
+    </h2>
+    <p>{user.email || ''}</p>
+  </div>
+</div>
+
+{showWelcome && user.isNewUser && (
+  <div class="welcome-banner">
+    <strong>🎉 Welcome to XAOSTECH!</strong> 
+    Visit <a href="/service-accounts">API Keys</a> to get your access token.
+  </div>
+)}
+
+<style>
+  .user-card {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: var(--bg-card, #1a1a1a);
+    border: 1px solid var(--border, #333);
+    border-radius: 12px;
+    margin-bottom: 2rem;
+  }
+
+  .avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--primary, #f6821f);
+  }
+
+  .user-info h2 {
+    margin: 0 0 0.5rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .user-info p {
+    color: var(--text-muted, #888);
+    margin: 0;
+  }
+
+  .welcome-banner {
+    background: linear-gradient(135deg, rgba(246, 130, 31, 0.2), rgba(230, 81, 0, 0.1));
+    border: 1px solid var(--primary, #f6821f);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .user-card {
+      flex-direction: column;
+      text-align: center;
+    }
+  }
+</style>

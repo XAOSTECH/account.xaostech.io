@@ -1,0 +1,128 @@
+---
+/**
+ * Navigation grid component
+ * Displays a grid of navigation links for authenticated users
+ */
+interface NavItem {
+  href: string;
+  icon: string;
+  title: string;
+  description: string;
+  adminOnly?: boolean;
+  ownerOnly?: boolean;
+}
+
+interface Props {
+  role?: string;
+}
+
+const { role = 'user' } = Astro.props;
+const isAdmin = role === 'admin' || role === 'owner';
+const isOwner = role === 'owner';
+
+const navItems: NavItem[] = [
+  {
+    href: '/profile',
+    icon: '👤',
+    title: 'Profile',
+    description: 'View and edit your profile'
+  },
+  {
+    href: '/service-accounts',
+    icon: '🔑',
+    title: 'API Keys',
+    description: 'Manage API access tokens'
+  },
+  {
+    href: '/family',
+    icon: '👨‍👩‍👧‍👦',
+    title: 'Family',
+    description: 'Manage child accounts'
+  },
+  {
+    href: '/notifications',
+    icon: '🔔',
+    title: 'Notifications',
+    description: 'View notifications and alerts'
+  },
+  {
+    href: '/notifications/settings',
+    icon: '⚙️',
+    title: 'Settings',
+    description: 'Notification preferences'
+  },
+  {
+    href: '/admin',
+    icon: '🛡️',
+    title: 'Admin Panel',
+    description: 'User management & system admin',
+    adminOnly: true
+  }
+];
+
+const visibleItems = navItems.filter(item => {
+  if (item.ownerOnly && !isOwner) return false;
+  if (item.adminOnly && !isAdmin) return false;
+  return true;
+});
+---
+<nav class="nav-grid">
+  {visibleItems.map(item => (
+    <a href={item.href} class="nav-link">
+      <span class="icon">{item.icon}</span>
+      <div class="nav-text">
+        <h3>{item.title}</h3>
+        <p>{item.description}</p>
+      </div>
+    </a>
+  ))}
+</nav>
+
+<style>
+  .nav-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: var(--bg-card, #1a1a1a);
+    border: 1px solid var(--border, #333);
+    border-radius: 12px;
+    transition: all 0.2s;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .nav-link:hover {
+    border-color: var(--primary, #f6821f);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .icon {
+    font-size: 2rem;
+  }
+
+  .nav-text h3 {
+    margin: 0;
+    color: var(--text, #e0e0e0);
+  }
+
+  .nav-text p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted, #888);
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 768px) {
+    .nav-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

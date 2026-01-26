@@ -1,0 +1,47 @@
+---
+/**
+ * Role badge component
+ * Displays a colored badge based on user role
+ */
+interface Props {
+  role: string;
+}
+
+const { role } = Astro.props;
+
+const roleColors: Record<string, string> = {
+  owner: 'badge-owner',
+  admin: 'badge-admin',
+  user: 'badge-user',
+};
+
+const badgeClass = roleColors[role] || 'badge-user';
+---
+<span class={`badge ${badgeClass}`}>{role.toUpperCase()}</span>
+
+<style>
+  .badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 0.5rem;
+  }
+
+  .badge-owner {
+    background: linear-gradient(135deg, #f6821f, #e65100);
+    color: #fff;
+  }
+
+  .badge-admin {
+    background: #7c3aed;
+    color: #fff;
+  }
+
+  .badge-user {
+    background: #333;
+    color: #aaa;
+  }
+</style>

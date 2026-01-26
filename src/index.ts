@@ -3642,7 +3642,7 @@ app.post('/api/wall/:userId/post', async (c) => {
   if (!isOwnProfile) {
     const privacy = await getPrivacySettings(c.env.DB, profileUserId);
     const friendshipStatus = await getFriendshipStatus(c.env.DB, user.id, profileUserId);
-    
+
     if (privacy.who_can_post_on_wall === 'nobody') {
       return c.redirect(`/profile/${profileUserId}?error=not_allowed`);
     }
@@ -3798,7 +3798,7 @@ app.post('/profile/:username/edit', async (c) => {
   }
 
   const formData = await c.req.formData();
-  
+
   await updateProfile(c.env.DB, user.id, {
     display_name: formData.get('display_name')?.toString() || null,
     bio: formData.get('bio')?.toString() || null,
@@ -3965,7 +3965,7 @@ app.post('/profile/:username/privacy', async (c) => {
   }
 
   const formData = await c.req.formData();
-  
+
   await updatePrivacySettings(c.env.DB, user.id, {
     about_visibility: formData.get('about_visibility')?.toString() as any,
     photos_visibility: formData.get('photos_visibility')?.toString() as any,

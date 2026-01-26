@@ -1,13 +1,19 @@
 name = "xaostech-account"
 compatibility_date = "2025-12-31"
-main = "src/index.ts"
+main = "dist/_worker.js/index.js"
 send_metrics = false
 compatibility_flags = ["nodejs_compat"]
 
+[assets]
+directory = "./dist"
+
 [env.production]
 name = "xaostech-account"
-main = "src/index.ts"
+main = "dist/_worker.js/index.js"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
+
+[env.production.assets]
+directory = "./dist"
 
 # Runtime secrets for OAuth (set via wrangler secret put --env production)
 # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
