@@ -1,0 +1,245 @@
+---
+import Base from '../../layouts/Base.astro';
+
+const user = Astro.locals.user;
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const runtime = Astro.locals.runtime;
+
+// Get children linked to this parent
+let children: any[] = [];
+let pendingApprovals: any[] = [];
+
+try {
+  const result = await runtime.env.DB.prepare(`
+    SELECT ca.*, u.email as child_email, u.avatar_url as child_avatar,
+           pc.content_filter_level, pc.daily_time_limit, pc.weekly_time_limit,
+           pc.can_post_content, pc.can_comment, pc.require_approval_for_posts
+    FROM child_accounts ca
+    JOIN users u ON ca.child_id = u.id
+    LEFT JOIN parental_controls pc ON ca.child_id = pc.child_id
+    WHERE ca.parent_id = ?
+    ORDER BY ca.created_at DESC
+  `).bind(user.user_id).all();
+  children = result.results || [];
+} catch (err) {
+  console.error('Failed to fetch children:', err);
+}
+
+try {
+  const result = await runtime.env.DB.prepare(`
+    SELECT pa.*, ca.child_name
+    FROM parent_approvals pa
+    JOIN child_accounts ca ON pa.child_id = ca.child_id
+    WHERE pa.parent_id = ? AND pa.status = 'pending'
+    ORDER BY pa.created_at DESC
+    LIMIT 20
+  `).bind(user.user_id).all();
+  pendingApprovals = result.results || [];
+} catch (err) {
+  console.error('Failed to fetch approvals:', err);
+}
+
+function getFilterBadgeClass(level: string): string {
+  switch (level) {
+    case 'strict': return 'badge-strict';
+    case 'moderate': return 'badge-moderate';
+    case 'minimal': return 'badge-minimal';
+    default: return 'badge-strict';
+  }
+}
+---
+
+<Base title="Family Dashboard" user={user}>
+  <a href="/" class="back">← Back to Account</a>
+  <h1>👨‍👩‍👧‍👦 Family Dashboard</h1>
+  <p class="subtitle">Manage your children's accounts and safety settings</p>
+  
+  <div class="action-bar">
+    <a href="/family/add-child" class="btn primary">+ Add Child Account</a>
+    <a href="/family/billing" class="btn secondary">💳 Family Billing</a>
+    <a href="/notifications" class="btn secondary">🔔 Notifications</a>
+  </div>
+  
+  {pendingApprovals.length > 0 && (
+    <section>
+      <h2 class="section-title">⏳ Pending Approvals ({pendingApprovals.length})</h2>
+      <div class="card">
+        {pendingApprovals.map((a: any) => (
+          <div class="approval-item">
+            <div>
+              <strong>{a.child_name}</strong> wants to {a.approval_type.replace(/_/g, ' ')}
+              <p class="meta">{new Date(a.created_at).toLocaleString()}</p>
+            </div>
+            <div class="approval-actions">
+              <form method="POST" action={`/api/family/approve/${a.id}`}>
+                <button type="submit" class="btn primary small">✓ Approve</button>
+              </form>
+              <form method="POST" action={`/api/family/deny/${a.id}`}>
+                <button type="submit" class="btn secondary small">✗ Deny</button>
+              </form>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )}
+  
+  <section>
+    <h2 class="section-title">👧 Children ({children.length})</h2>
+    
+    {children.length > 0 ? (
+      children.map((child: any) => (
+        <div class="card child-card">
+          <img 
+            src={child.child_avatar || '/api/data/assets/XAOSTECH_LOGO.png'} 
+            alt={child.child_name} 
+            class="child-avatar"
+          />
+          <div class="child-info">
+            <h3>{child.child_name}</h3>
+            <p class="meta">
+              {child.child_email || 'No email'} 
+              {child.birth_year && ` • Born ${child.birth_year}`}
+            </p>
+            <div class="child-controls">
+              <span class={`badge ${getFilterBadgeClass(child.content_filter_level || 'strict')}`}>
+                {(child.content_filter_level || 'strict').toUpperCase()} filter
+              </span>
+              <span class="badge badge-time">{child.daily_time_limit || 60} min/day</span>
+              {child.can_post_content && (
+                <span class="badge badge-permission">Can post</span>
+              )}
+              {child.require_approval_for_posts && (
+                <span class="badge badge-approval">Needs approval</span>
+              )}
+            </div>
+          </div>
+          <div class="child-actions">
+            <a href={`/family/child/${child.child_id}`} class="btn secondary small">⚙️ Settings</a>
+            <a href={`/family/activity/${child.child_id}`} class="btn secondary small">📊 Activity</a>
+          </div>
+        </div>
+      ))
+    ) : (
+      <div class="card empty">
+        No children added yet. Click "Add Child Account" to get started.
+      </div>
+    )}
+  </section>
+</Base>
+
+<style>
+  .back {
+    color: var(--primary);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .back:hover { text-decoration: underline; }
+  
+  h1 { color: var(--primary); margin-bottom: 0.5rem; }
+  .subtitle { color: #888; margin-bottom: 2rem; }
+  
+  .action-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  
+  .section-title {
+    margin: 2rem 0 1rem;
+    color: #888;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  
+  .child-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .child-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 2px solid var(--primary);
+    object-fit: cover;
+  }
+  
+  .child-info {
+    flex: 1;
+  }
+  .child-info h3 { margin-bottom: 0.25rem; }
+  .child-info .meta { color: #888; font-size: 0.9rem; }
+  
+  .child-controls {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+  }
+  
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  .badge-strict { background: #e53935; color: #fff; }
+  .badge-moderate { background: #ffa726; color: #000; }
+  .badge-minimal { background: #43a047; color: #fff; }
+  .badge-time { background: #333; color: #fff; }
+  .badge-permission { background: #43a047; color: #fff; }
+  .badge-approval { background: #7c3aed; color: #fff; }
+  
+  .child-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .btn.small {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .approval-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .approval-item:last-child { border-bottom: none; }
+  
+  .approval-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .approval-actions form { display: inline; }
+  
+  .empty {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+  }
+  
+  @media (max-width: 600px) {
+    .child-card {
+      flex-direction: column;
+      text-align: center;
+    }
+    .child-actions {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+</style>

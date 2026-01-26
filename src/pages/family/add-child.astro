@@ -1,0 +1,206 @@
+---
+import Base from '../../layouts/Base.astro';
+
+const user = Astro.locals.user;
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const url = new URL(Astro.request.url);
+const error = url.searchParams.get('error');
+
+// Generate year options for birth year select
+const currentYear = new Date().getFullYear();
+const yearOptions = Array.from({ length: 18 }, (_, i) => currentYear - 4 - i);
+---
+
+<Base title="Add Child Account" user={user}>
+  <a href="/family" class="back">← Back to Family Dashboard</a>
+  <h1>👧 Add Child Account</h1>
+  <p class="subtitle">Create a safe, supervised account for your child</p>
+  
+  {error && (
+    <div class="alert alert-error">
+      {error === 'missing_fields' && 'Please fill in all required fields'}
+      {error === 'username_taken' && 'This username is already taken'}
+      {error === 'creation_failed' && 'Failed to create account. Please try again.'}
+    </div>
+  )}
+  
+  <div class="card">
+    <div class="info-box">
+      🔒 Child accounts have restricted access and activity monitoring. You'll be able to approve their actions and set time limits.
+    </div>
+    
+    <form method="POST" action="/api/family/add-child">
+      <div class="form-group">
+        <label for="child_name">Child's Name</label>
+        <input type="text" id="child_name" name="child_name" required placeholder="How should we call them?" />
+      </div>
+      
+      <div class="form-group">
+        <label for="child_username">Username</label>
+        <input 
+          type="text" 
+          id="child_username" 
+          name="child_username" 
+          required 
+          placeholder="Choose a unique username" 
+          pattern="[a-zA-Z0-9_-]+" 
+          minlength="3"
+        />
+        <small>Letters, numbers, underscores and dashes only</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="child_password">Password</label>
+        <input 
+          type="password" 
+          id="child_password" 
+          name="child_password" 
+          required 
+          minlength="6" 
+          placeholder="At least 6 characters"
+        />
+        <small>This is what your child will use to log in</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="birth_year">Birth Year (optional)</label>
+        <select id="birth_year" name="birth_year">
+          <option value="">-- Select --</option>
+          {yearOptions.map(y => (
+            <option value={y}>{y}</option>
+          ))}
+        </select>
+        <small>Helps us show age-appropriate content</small>
+      </div>
+      
+      <div class="form-group">
+        <label for="filter_level">Content Filter Level</label>
+        <select id="filter_level" name="filter_level">
+          <option value="strict">Strict (recommended for under 10)</option>
+          <option value="moderate">Moderate (10-13 years)</option>
+          <option value="minimal">Minimal (13+ years)</option>
+        </select>
+      </div>
+      
+      <h3 class="section-heading">⏰ Time Limits</h3>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label for="daily_limit">Daily Limit (minutes)</label>
+          <input type="number" id="daily_limit" name="daily_limit" value="60" min="0" max="1440" />
+        </div>
+        <div class="form-group">
+          <label for="weekly_limit">Weekly Limit (minutes)</label>
+          <input type="number" id="weekly_limit" name="weekly_limit" value="420" min="0" max="10080" />
+        </div>
+      </div>
+      
+      <h3 class="section-heading">✅ Permissions</h3>
+      
+      <div class="checkbox-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="can_post_content" />
+          <span>Can create blog posts</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="can_comment" checked />
+          <span>Can comment on content</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="require_approval_for_posts" checked />
+          <span>Require approval for posts</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="log_exercises" checked />
+          <span>Log exercise completions</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="log_logins" checked />
+          <span>Log login activity</span>
+        </label>
+      </div>
+      
+      <button type="submit" class="btn primary full-width">Create Child Account</button>
+    </form>
+  </div>
+</Base>
+
+<style>
+  .back {
+    color: var(--primary);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+  .back:hover { text-decoration: underline; }
+  
+  h1 { color: var(--primary); margin-bottom: 0.5rem; }
+  .subtitle { color: #888; margin-bottom: 2rem; }
+  
+  .alert {
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+  .alert-error {
+    background: rgba(229,57,53,0.1);
+    border: 1px solid #e53935;
+    color: #e53935;
+  }
+  
+  .info-box {
+    background: rgba(246, 130, 31, 0.1);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+  }
+  
+  .section-heading {
+    margin: 1.5rem 0 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 1rem;
+  }
+  
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+  }
+  .checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary);
+  }
+  
+  .btn.full-width {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  @media (max-width: 500px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,420 @@
+---
+import Base from '../../layouts/Base.astro';
+import RoleBadge from '../../components/RoleBadge.astro';
+
+const user = Astro.locals.user;
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const runtime = Astro.locals.runtime;
+
+// Fetch user's public blog posts
+let posts: any[] = [];
+let friends: any[] = [];
+let friendPosts: any[] = [];
+
+try {
+  // User's own posts
+  const postsResult = await runtime.env.DB.prepare(`
+    SELECT p.*, u.username, u.avatar_url
+    FROM posts p
+    JOIN users u ON p.author_id = u.id
+    WHERE p.author_id = ? AND p.status = 'published'
+    ORDER BY p.created_at DESC
+    LIMIT 10
+  `).bind(user.user_id).all();
+  posts = postsResult.results || [];
+} catch (err) {
+  console.error('Failed to fetch posts:', err);
+}
+
+try {
+  // Friends list
+  const friendsResult = await runtime.env.DB.prepare(`
+    SELECT u.id, u.username, u.avatar_url, u.role,
+           f.status, f.created_at as friend_since
+    FROM friendships f
+    JOIN users u ON (
+      CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END
+    ) = u.id
+    WHERE (f.user_id = ? OR f.friend_id = ?) AND f.status = 'accepted'
+    ORDER BY f.created_at DESC
+    LIMIT 10
+  `).bind(user.user_id, user.user_id, user.user_id).all();
+  friends = friendsResult.results || [];
+} catch (err) {
+  console.error('Failed to fetch friends:', err);
+}
+
+try {
+  // Friends' recent posts (timeline)
+  if (friends.length > 0) {
+    const friendIds = friends.map(f => f.id).join(',');
+    const friendPostsResult = await runtime.env.DB.prepare(`
+      SELECT p.*, u.username, u.avatar_url
+      FROM posts p
+      JOIN users u ON p.author_id = u.id
+      WHERE p.author_id IN (${friendIds}) 
+        AND p.status = 'published'
+        AND p.visibility IN ('public', 'friends')
+      ORDER BY p.created_at DESC
+      LIMIT 20
+    `).all();
+    friendPosts = friendPostsResult.results || [];
+  }
+} catch (err) {
+  console.error('Failed to fetch friend posts:', err);
+}
+
+// Combine and sort all posts for timeline
+const timeline = [...posts, ...friendPosts]
+  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  .slice(0, 20);
+
+function timeAgo(date: string): string {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return new Date(date).toLocaleDateString();
+}
+---
+
+<Base title="Profile" user={user}>
+  <div class="profile-header">
+    <div class="user-info">
+      <img 
+        src={user.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+        alt={user.username} 
+        class="avatar"
+      />
+      <div>
+        <h1>{user.username}</h1>
+        <div class="user-meta">
+          <RoleBadge role={user.role || 'user'} />
+          <span class="email">{user.email}</span>
+        </div>
+      </div>
+    </div>
+    <div class="profile-actions">
+      <a href="/profile/edit" class="btn secondary">✏️ Edit Profile</a>
+      <a href="https://blog.xaostech.io/new" class="btn primary">📝 New Post</a>
+    </div>
+  </div>
+  
+  <div class="profile-layout">
+    <main class="timeline">
+      <h2 class="section-title">📰 Timeline</h2>
+      
+      {timeline.length > 0 ? (
+        timeline.map((post: any) => (
+          <article class="post-card">
+            <div class="post-header">
+              <img 
+                src={post.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+                alt={post.username}
+                class="post-avatar"
+              />
+              <div>
+                <a href={`/profile/${post.username}`} class="post-author">{post.username}</a>
+                <span class="post-time">{timeAgo(post.created_at)}</span>
+              </div>
+            </div>
+            <h3 class="post-title">
+              <a href={`https://blog.xaostech.io/post/${post.slug || post.id}`}>{post.title}</a>
+            </h3>
+            {post.excerpt && <p class="post-excerpt">{post.excerpt}</p>}
+            <div class="post-footer">
+              <span>❤️ {post.likes || 0}</span>
+              <span>💬 {post.comments_count || 0}</span>
+            </div>
+          </article>
+        ))
+      ) : (
+        <div class="empty-state">
+          <p>No posts yet! Start sharing your thoughts.</p>
+          <a href="https://blog.xaostech.io/new" class="btn primary">Create Your First Post</a>
+        </div>
+      )}
+    </main>
+    
+    <aside class="sidebar">
+      <section class="sidebar-section">
+        <h3>👥 Friends ({friends.length})</h3>
+        {friends.length > 0 ? (
+          <div class="friends-grid">
+            {friends.slice(0, 6).map((friend: any) => (
+              <a href={`/profile/${friend.username}`} class="friend-item" title={friend.username}>
+                <img 
+                  src={friend.avatar_url || '/api/data/assets/XAOSTECH_LOGO.png'} 
+                  alt={friend.username}
+                />
+              </a>
+            ))}
+          </div>
+        ) : (
+          <p class="empty-text">No friends yet. Find people to connect with!</p>
+        )}
+        <a href="/friends" class="view-all">View all friends →</a>
+      </section>
+      
+      <section class="sidebar-section">
+        <h3>📊 Stats</h3>
+        <div class="stats-grid">
+          <div class="stat">
+            <span class="stat-value">{posts.length}</span>
+            <span class="stat-label">Posts</span>
+          </div>
+          <div class="stat">
+            <span class="stat-value">{friends.length}</span>
+            <span class="stat-label">Friends</span>
+          </div>
+        </div>
+      </section>
+      
+      <section class="sidebar-section">
+        <h3>🔗 Quick Links</h3>
+        <nav class="quick-links">
+          <a href="https://blog.xaostech.io">📝 My Blog</a>
+          <a href="https://edu.xaostech.io">📚 Learning</a>
+          <a href="https://lingua.xaostech.io">🌍 Lingua</a>
+          <a href="/service-accounts">🔑 API Keys</a>
+        </nav>
+      </section>
+    </aside>
+  </div>
+</Base>
+
+<style>
+  .profile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  
+  .avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid var(--primary);
+    object-fit: cover;
+  }
+  
+  .user-info h1 {
+    color: #fff;
+    margin-bottom: 0.25rem;
+  }
+  
+  .user-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  
+  .email {
+    color: #666;
+    font-size: 0.9rem;
+  }
+  
+  .profile-actions {
+    display: flex;
+    gap: 0.75rem;
+  }
+  
+  .profile-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 2rem;
+  }
+  
+  .section-title {
+    color: #888;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1rem;
+  }
+  
+  .post-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+  
+  .post-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  
+  .post-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  
+  .post-author {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 500;
+  }
+  .post-author:hover { color: var(--primary); }
+  
+  .post-time {
+    color: #666;
+    font-size: 0.85rem;
+    display: block;
+  }
+  
+  .post-title {
+    margin-bottom: 0.5rem;
+  }
+  .post-title a {
+    color: #fff;
+    text-decoration: none;
+  }
+  .post-title a:hover { color: var(--primary); }
+  
+  .post-excerpt {
+    color: #888;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  
+  .post-footer {
+    display: flex;
+    gap: 1rem;
+    color: #666;
+    font-size: 0.85rem;
+  }
+  
+  .empty-state {
+    text-align: center;
+    padding: 3rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .empty-state p {
+    color: #666;
+    margin-bottom: 1rem;
+  }
+  
+  .sidebar-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  
+  .sidebar-section h3 {
+    font-size: 0.9rem;
+    color: var(--primary);
+    margin-bottom: 1rem;
+  }
+  
+  .friends-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+  
+  .friend-item img {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    object-fit: cover;
+    transition: transform 0.2s;
+  }
+  .friend-item:hover img {
+    transform: scale(1.05);
+  }
+  
+  .empty-text {
+    color: #666;
+    font-size: 0.85rem;
+  }
+  
+  .view-all {
+    display: block;
+    text-align: center;
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    margin-top: 1rem;
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  
+  .stat {
+    text-align: center;
+  }
+  .stat-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--primary);
+  }
+  .stat-label {
+    font-size: 0.75rem;
+    color: #666;
+    text-transform: uppercase;
+  }
+  
+  .quick-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .quick-links a {
+    color: #ccc;
+    text-decoration: none;
+    font-size: 0.9rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+  .quick-links a:hover {
+    background: rgba(255,255,255,0.05);
+    color: var(--primary);
+  }
+  
+  @media (max-width: 768px) {
+    .profile-header {
+      flex-direction: column;
+      gap: 1rem;
+      text-align: center;
+    }
+    .user-info {
+      flex-direction: column;
+    }
+    .profile-layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      order: -1;
+    }
+  }
+</style>
