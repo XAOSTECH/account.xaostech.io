@@ -2,25 +2,19 @@
 /**
  * Login Page
  * 
- * By default, auto-redirects to GitHub OAuth for seamless SSO.
- * Add ?method=password to show email/password form instead.
+ * Users can choose between email/password or GitHub OAuth.
+ * GitHub OAuth is recommended - if the user is already signed into github.com,
+ * they'll be logged in automatically without entering credentials.
  */
 import Base from '../layouts/Base.astro';
 
 const error = Astro.url.searchParams.get('error') || '';
 const success = Astro.url.searchParams.get('success') || '';
-const method = Astro.url.searchParams.get('method') || 'github';
 const returnTo = Astro.url.searchParams.get('return_to') || '/';
 
 // Redirect if already logged in
 if (Astro.locals.user) {
   return Astro.redirect('/');
-}
-
-// Auto-redirect to GitHub OAuth unless explicitly requesting password login
-if (method !== 'password' && !error) {
-  const githubUrl = `/api/auth/github/login?return_to=${encodeURIComponent(returnTo)}`;
-  return Astro.redirect(githubUrl);
 }
 ---
 <Base title="Sign In" showNav={false}>
