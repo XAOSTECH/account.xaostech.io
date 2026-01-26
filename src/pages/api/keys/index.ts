@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getSessionIdFromCookie, getSession, generateApiKey } from '../../lib/session';
+import { getSessionIdFromCookie, getSession, generateApiKey } from '../../../lib/session';
 
 export const GET: APIRoute = async ({ request, locals }) => {
     const runtime = locals.runtime;
