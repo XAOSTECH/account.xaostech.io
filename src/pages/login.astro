@@ -1,16 +1,11 @@
 ---
 /**
  * Login Page
- * 
- * Users can choose between email/password or GitHub OAuth.
- * GitHub OAuth is recommended - if the user is already signed into github.com,
- * they'll be logged in automatically without entering credentials.
  */
 import Base from '../layouts/Base.astro';
 
 const error = Astro.url.searchParams.get('error') || '';
 const success = Astro.url.searchParams.get('success') || '';
-const returnTo = Astro.url.searchParams.get('return_to') || '/';
 
 // Redirect if already logged in
 if (Astro.locals.user) {
@@ -73,7 +68,7 @@ if (Astro.locals.user) {
     const email = (document.getElementById('email') as HTMLInputElement).value;
     const password = (document.getElementById('password') as HTMLInputElement).value;
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('https://api.xaostech.io/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -83,10 +78,10 @@ if (Astro.locals.user) {
       if (res.ok) {
         window.location.href = '/';
       } else {
-        window.location.href = '/login?method=password&error=' + encodeURIComponent(data.error || 'Login failed');
+        window.location.href = '/login?error=' + encodeURIComponent(data.error || 'Login failed');
       }
     } catch (err) {
-      window.location.href = '/login?method=password&error=' + encodeURIComponent('Network error');
+      window.location.href = '/login?error=' + encodeURIComponent('Network error');
     }
   });
 </script>
