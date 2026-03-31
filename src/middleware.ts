@@ -1,24 +1,27 @@
-import { defineMiddleware } from 'astro:middleware';
+import { defineMiddleware, sequence } from 'astro:middleware';
 import { getSession, getSessionIdFromCookie, type SessionUser } from './lib/session';
+import { applySecurityHeaders } from '../shared/types/security';
 
-export const onRequest = defineMiddleware(async (context, next) => {
+const sessionMiddleware = defineMiddleware(async (context, next) => {
     const runtime = context.locals.runtime as { env: Env };
-
-    // Get session from cookie
     const cookieHeader = context.request.headers.get('Cookie');
     const sessionId = getSessionIdFromCookie(cookieHeader);
 
     let user: SessionUser | null = null;
-
     if (sessionId && runtime?.env?.SESSIONS_KV) {
         user = await getSession(sessionId, runtime.env.SESSIONS_KV);
     }
 
-    // Attach user to locals for use in pages
     context.locals.user = user;
-
     return next();
 });
+
+const securityMiddleware = defineMiddleware(async (_context, next) => {
+    const res = await next();
+    return applySecurityHeaders(res);
+});
+
+export const onRequest = sequence(sessionMiddleware, securityMiddleware);
 
 interface Env {
     DB: D1Database;
