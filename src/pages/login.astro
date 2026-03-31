@@ -21,7 +21,7 @@ if (Astro.locals.user) {
       {error && <div class="message message-error">{error}</div>}
       {success && <div class="message message-success">{success}</div>}
 
-      <form id="loginForm">
+      <form id="loginForm" action="/api/auth/login" method="POST">
         <div class="form-group">
           <label for="email">Email</label>
           <input type="email" id="email" name="email" required autocomplete="email" />

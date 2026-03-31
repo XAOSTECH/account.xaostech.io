@@ -1,15 +1,27 @@
 import type { APIRoute } from 'astro';
 import { getSessionIdFromCookie, getSession, createSessionCookie, createSession } from '../../../lib/session';
 
+async function parseBody(request: Request): Promise<{ email: string; password: string; isForm: boolean }> {
+    const ct = request.headers.get('Content-Type') || '';
+    if (ct.includes('application/x-www-form-urlencoded')) {
+        const form = new URLSearchParams(await request.text());
+        return { email: form.get('email') || '', password: form.get('password') || '', isForm: true };
+    }
+    const json = await request.json() as { email?: string; password?: string };
+    return { email: json.email || '', password: json.password || '', isForm: false };
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
     const runtime = locals.runtime;
-    const { email, password } = await request.json();
+    const { email, password, isForm } = await parseBody(request);
+
+    const fail = (msg: string, status: number) => {
+        if (isForm) return Response.redirect(new URL(`/login?error=${encodeURIComponent(msg)}`, request.url).toString(), 303);
+        return new Response(JSON.stringify({ error: msg }), { status, headers: { 'Content-Type': 'application/json' } });
+    };
 
     if (!email || !password) {
-        return new Response(JSON.stringify({ error: 'Email and password are required' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Email and password are required', 400);
     }
 
     try {
@@ -20,19 +32,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
         ).bind(email.toLowerCase()).first();
 
         if (!user) {
-            return new Response(JSON.stringify({ error: 'Invalid email or password' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return fail('Invalid email or password', 401);
         }
 
         // Verify password
         const passwordValid = await verifyPassword(password, user.password_hash as string);
         if (!passwordValid) {
-            return new Response(JSON.stringify({ error: 'Invalid email or password' }), {
-                status: 401,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return fail('Invalid email or password', 401);
         }
 
         // Create session
@@ -46,19 +52,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
             github_username: user.github_username as string | undefined,
         });
 
+        const cookie = createSessionCookie(sessionId);
+        if (isForm) {
+            return new Response(null, {
+                status: 303,
+                headers: { Location: '/', 'Set-Cookie': cookie },
+            });
+        }
         return new Response(JSON.stringify({ success: true, redirect: '/' }), {
             status: 200,
             headers: {
                 'Content-Type': 'application/json',
-                'Set-Cookie': createSessionCookie(sessionId),
+                'Set-Cookie': cookie,
             },
         });
     } catch (err) {
         console.error('Login error:', err);
-        return new Response(JSON.stringify({ error: 'Login failed' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Login failed', 500);
     }
 };
 

@@ -19,7 +19,7 @@ if (Astro.locals.user) {
     <div class="card">
       {error && <div class="message message-error">{error}</div>}
 
-      <form id="registerForm">
+      <form id="registerForm" action="/api/auth/register" method="POST">
         <div class="form-group">
           <label for="username">Username</label>
           <input type="text" id="username" name="username" required pattern="^[a-zA-Z0-9_-]+$" minlength="3" maxlength="30" />

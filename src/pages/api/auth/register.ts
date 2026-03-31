@@ -1,40 +1,43 @@
 import type { APIRoute } from 'astro';
 import { createSessionCookie, createSession } from '../../../lib/session';
 
+async function parseBody(request: Request): Promise<{ username: string; email: string; password: string; isForm: boolean }> {
+    const ct = request.headers.get('Content-Type') || '';
+    if (ct.includes('application/x-www-form-urlencoded')) {
+        const form = new URLSearchParams(await request.text());
+        return { username: form.get('username') || '', email: form.get('email') || '', password: form.get('password') || '', isForm: true };
+    }
+    const json = await request.json() as { username?: string; email?: string; password?: string };
+    return { username: json.username || '', email: json.email || '', password: json.password || '', isForm: false };
+}
+
 export const POST: APIRoute = async ({ request, locals }) => {
     const runtime = locals.runtime;
-    const { username, email, password } = await request.json();
+    const { username, email, password, isForm } = await parseBody(request);
+
+    const fail = (msg: string, status: number) => {
+        if (isForm) return Response.redirect(new URL(`/register?error=${encodeURIComponent(msg)}`, request.url).toString(), 303);
+        return new Response(JSON.stringify({ error: msg }), { status, headers: { 'Content-Type': 'application/json' } });
+    };
 
     if (!username || !email || !password) {
-        return new Response(JSON.stringify({ error: 'All fields are required' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('All fields are required', 400);
     }
 
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-        return new Response(JSON.stringify({ error: 'Invalid email address' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Invalid email address', 400);
     }
 
     // Validate password
     if (password.length < 8) {
-        return new Response(JSON.stringify({ error: 'Password must be at least 8 characters' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Password must be at least 8 characters', 400);
     }
 
     // Validate username
     if (username.length < 2 || username.length > 50) {
-        return new Response(JSON.stringify({ error: 'Username must be 2-50 characters' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Username must be 2-50 characters', 400);
     }
 
     try {
@@ -44,10 +47,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         ).bind(email.toLowerCase()).first();
 
         if (existing) {
-            return new Response(JSON.stringify({ error: 'Email already registered' }), {
-                status: 409,
-                headers: { 'Content-Type': 'application/json' },
-            });
+            return fail('Email already registered', 409);
         }
 
         // Hash password
@@ -69,19 +69,23 @@ export const POST: APIRoute = async ({ request, locals }) => {
             isNewUser: true,
         });
 
+        const cookie = createSessionCookie(sessionId);
+        if (isForm) {
+            return new Response(null, {
+                status: 303,
+                headers: { Location: '/login?success=Account+created.+Please+check+your+email.', 'Set-Cookie': cookie },
+            });
+        }
         return new Response(JSON.stringify({ success: true, redirect: '/' }), {
             status: 201,
             headers: {
                 'Content-Type': 'application/json',
-                'Set-Cookie': createSessionCookie(sessionId),
+                'Set-Cookie': cookie,
             },
         });
     } catch (err) {
         console.error('Registration error:', err);
-        return new Response(JSON.stringify({ error: 'Registration failed' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return fail('Registration failed', 500);
     }
 };
 
