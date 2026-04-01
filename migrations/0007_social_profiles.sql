@@ -222,14 +222,14 @@ CREATE TABLE IF NOT EXISTS profile_visitors (
 );
 
 -- Indexes for efficient queries
-CREATE INDEX idx_user_profiles_user ON user_profiles(user_id);
-CREATE INDEX idx_profile_photos_user ON profile_photos(user_id, sort_order);
-CREATE INDEX idx_profile_photos_album ON profile_photos(user_id, album);
-CREATE INDEX idx_wall_posts_user ON wall_posts(user_id, created_at DESC);
-CREATE INDEX idx_wall_posts_author ON wall_posts(author_id);
-CREATE INDEX idx_wall_comments_post ON wall_comments(post_id, created_at);
-CREATE INDEX idx_social_likes_target ON social_likes(target_type, target_id);
-CREATE INDEX idx_friendships_requester ON friendships(requester_id, status);
-CREATE INDEX idx_friendships_addressee ON friendships(addressee_id, status);
-CREATE INDEX idx_friend_group_members_group ON friend_group_members(group_id);
-CREATE INDEX idx_profile_visitors_profile ON profile_visitors(profile_user_id, last_visit_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_profile_photos_user ON profile_photos(user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_profile_photos_album ON profile_photos(user_id, album);
+CREATE INDEX IF NOT EXISTS idx_wall_posts_user ON wall_posts(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_wall_posts_author ON wall_posts(author_id);
+CREATE INDEX IF NOT EXISTS idx_wall_comments_post ON wall_comments(post_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_social_likes_target ON social_likes(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_requester ON friendships(requester_id, status);
+CREATE INDEX IF NOT EXISTS idx_friendships_addressee ON friendships(addressee_id, status);
+CREATE INDEX IF NOT EXISTS idx_friend_group_members_group ON friend_group_members(group_id);
+CREATE INDEX IF NOT EXISTS idx_profile_visitors_profile ON profile_visitors(profile_user_id, last_visit_at DESC);

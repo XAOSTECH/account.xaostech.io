@@ -75,8 +75,8 @@ CREATE TABLE IF NOT EXISTS notification_batch (
 );
 
 -- Indexes for efficient queries
-CREATE INDEX idx_parent_notifications_parent ON parent_notifications(parent_id, status);
-CREATE INDEX idx_parent_notifications_status ON parent_notifications(status, created_at);
-CREATE INDEX idx_parent_notifications_child ON parent_notifications(child_id, created_at DESC);
-CREATE INDEX idx_notification_batch_scheduled ON notification_batch(scheduled_for, status);
-CREATE INDEX idx_notification_preferences_user ON notification_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_parent_notifications_parent ON parent_notifications(parent_id, status);
+CREATE INDEX IF NOT EXISTS idx_parent_notifications_status ON parent_notifications(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_parent_notifications_child ON parent_notifications(child_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_batch_scheduled ON notification_batch(scheduled_for, status);
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_user ON notification_preferences(user_id);

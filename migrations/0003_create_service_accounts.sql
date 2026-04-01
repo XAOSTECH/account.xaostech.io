@@ -18,10 +18,10 @@ CREATE TABLE IF NOT EXISTS service_accounts (
 );
 
 -- Index for token lookup during verification
-CREATE INDEX idx_service_accounts_token_hash ON service_accounts(token_hash) WHERE active = 1;
+CREATE INDEX IF NOT EXISTS idx_service_accounts_token_hash ON service_accounts(token_hash) WHERE active = 1;
 
 -- Index for user's service accounts
-CREATE INDEX idx_service_accounts_owner_id ON service_accounts(owner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_service_accounts_owner_id ON service_accounts(owner_id, created_at DESC);
 
 -- Index for rate limiting lookups
-CREATE INDEX idx_service_accounts_owner_active ON service_accounts(owner_id, active);
+CREATE INDEX IF NOT EXISTS idx_service_accounts_owner_active ON service_accounts(owner_id, active);

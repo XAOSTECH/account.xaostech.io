@@ -93,11 +93,11 @@ CREATE TABLE IF NOT EXISTS child_time_tracking (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_child_accounts_parent_id ON child_accounts(parent_id);
-CREATE INDEX idx_child_accounts_child_id ON child_accounts(child_id);
-CREATE INDEX idx_parental_controls_child_id ON parental_controls(child_id);
-CREATE INDEX idx_child_activity_child_id ON child_activity(child_id, created_at DESC);
-CREATE INDEX idx_child_activity_flagged ON child_activity(child_id, flagged) WHERE flagged = 1;
-CREATE INDEX idx_parent_approvals_parent_id ON parent_approvals(parent_id, status, created_at DESC);
-CREATE INDEX idx_parent_approvals_child_id ON parent_approvals(child_id, created_at DESC);
-CREATE INDEX idx_child_time_tracking_child_date ON child_time_tracking(child_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_child_accounts_parent_id ON child_accounts(parent_id);
+CREATE INDEX IF NOT EXISTS idx_child_accounts_child_id ON child_accounts(child_id);
+CREATE INDEX IF NOT EXISTS idx_parental_controls_child_id ON parental_controls(child_id);
+CREATE INDEX IF NOT EXISTS idx_child_activity_child_id ON child_activity(child_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_child_activity_flagged ON child_activity(child_id, flagged) WHERE flagged = 1;
+CREATE INDEX IF NOT EXISTS idx_parent_approvals_parent_id ON parent_approvals(parent_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_parent_approvals_child_id ON parent_approvals(child_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_child_time_tracking_child_date ON child_time_tracking(child_id, date DESC);

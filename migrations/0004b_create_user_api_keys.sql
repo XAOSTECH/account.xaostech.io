@@ -23,13 +23,13 @@ CREATE TABLE IF NOT EXISTS user_api_keys (
 );
 
 -- Fast lookup by key hash during verification
-CREATE INDEX idx_user_api_keys_hash ON user_api_keys(key_hash) WHERE active = 1;
+CREATE INDEX IF NOT EXISTS idx_user_api_keys_hash ON user_api_keys(key_hash) WHERE active = 1;
 
 -- List user's API keys
-CREATE INDEX idx_user_api_keys_user ON user_api_keys(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_api_keys_user ON user_api_keys(user_id, created_at DESC);
 
 -- Prefix lookup for key identification
-CREATE INDEX idx_user_api_keys_prefix ON user_api_keys(key_prefix);
+CREATE INDEX IF NOT EXISTS idx_user_api_keys_prefix ON user_api_keys(key_prefix);
 
 -- Cleanup expired keys (can run periodically)
-CREATE INDEX idx_user_api_keys_expires ON user_api_keys(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_user_api_keys_expires ON user_api_keys(expires_at) WHERE expires_at IS NOT NULL;

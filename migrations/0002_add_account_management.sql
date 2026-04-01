@@ -36,9 +36,9 @@ CREATE TABLE IF NOT EXISTS gdpr_deletions (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id, timestamp DESC);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action, timestamp DESC);
-CREATE INDEX idx_gdpr_exports_user_id ON gdpr_exports(user_id, requested_at DESC);
-CREATE INDEX idx_gdpr_exports_token ON gdpr_exports(token);
-CREATE INDEX idx_gdpr_deletions_user_id ON gdpr_deletions(user_id);
-CREATE INDEX idx_gdpr_deletions_delete_at ON gdpr_deletions(delete_at) WHERE status = 'confirmed';
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_gdpr_exports_user_id ON gdpr_exports(user_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gdpr_exports_token ON gdpr_exports(token);
+CREATE INDEX IF NOT EXISTS idx_gdpr_deletions_user_id ON gdpr_deletions(user_id);
+CREATE INDEX IF NOT EXISTS idx_gdpr_deletions_delete_at ON gdpr_deletions(delete_at) WHERE status = 'confirmed';

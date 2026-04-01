@@ -3,7 +3,7 @@
 -- Add role column (owner > admin > user)
 ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user';
 
--- Add GitHub profile tracking for "undo" functionality
+-- Add GitHub profile tracking
 ALTER TABLE users ADD COLUMN github_id TEXT;
 ALTER TABLE users ADD COLUMN github_username TEXT;
 ALTER TABLE users ADD COLUMN github_avatar_url TEXT;
@@ -19,6 +19,4 @@ ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_users_github_id ON users(github_id);
 
--- Update owner role for first user or known owner
--- You can run this manually for your account:
 -- UPDATE users SET role = 'owner' WHERE email = 'your@email.com';
