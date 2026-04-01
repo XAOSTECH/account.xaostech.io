@@ -1,6 +1,5 @@
 name = "xaostech-account"
 compatibility_date = "2025-12-31"
-main = "dist/_worker.js/index.js"
 send_metrics = false
 compatibility_flags = ["nodejs_compat"]
 
@@ -9,7 +8,6 @@ directory = "./dist"
 
 [env.production]
 name = "xaostech-account"
-main = "dist/_worker.js/index.js"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
 
 [env.production.assets]
