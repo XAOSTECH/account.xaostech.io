@@ -21,7 +21,7 @@ export const GET: APIRoute = async ({ locals, request }) => {
         'http://localhost:4321', // Dev
     ];
 
-    const corsOrigin = origin && allowedOrigins.some(o => origin.startsWith(o.replace('https://', '').replace('http://', '')))
+    const corsOrigin = origin && allowedOrigins.includes(origin)
         ? origin
         : allowedOrigins[0];
 
