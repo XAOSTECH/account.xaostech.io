@@ -1,9 +1,10 @@
 import { defineMiddleware, sequence } from 'astro:middleware';
+import { env as cfEnv } from 'cloudflare:workers';
 import { getSession, getSessionIdFromCookie, type SessionUser } from './lib/session';
 import { getSecurityHeaders } from '../shared/types/security';
 
 const sessionMiddleware = defineMiddleware(async (context, next) => {
-    const runtime = context.locals.runtime as { env: Env };
+    const runtime = { env: cfEnv as unknown as Env };
     const cookieHeader = context.request.headers.get('Cookie');
     const sessionId = getSessionIdFromCookie(cookieHeader);
 

@@ -1,5 +1,6 @@
 ---
 import Base from '../../../layouts/Base.astro';
+import { env as cfEnv } from 'cloudflare:workers';
 
 const user = Astro.locals.user;
 
@@ -8,7 +9,7 @@ if (!user) {
 }
 
 const childId = Astro.params.id;
-const runtime = Astro.locals.runtime;
+const runtime = { env: cfEnv as any };
 
 // Verify parent owns this child
 const child = await runtime.env.DB.prepare(`

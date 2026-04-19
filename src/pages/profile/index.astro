@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import { env as cfEnv } from 'cloudflare:workers';
 import RoleBadge from '../../components/RoleBadge.astro';
 
 const user = Astro.locals.user;
@@ -8,7 +9,7 @@ if (!user) {
   return Astro.redirect('/login');
 }
 
-const runtime = Astro.locals.runtime;
+const runtime = { env: cfEnv as any };
 
 // Fetch user's public blog posts
 let posts: any[] = [];

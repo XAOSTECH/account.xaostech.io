@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
+import { env as cfEnv } from 'cloudflare:workers';
 import { getSessionIdFromCookie, getSession } from '../../../lib/session';
 
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
-    const runtime = locals.runtime;
+    const runtime = { env: cfEnv as any };
     const cookie = request.headers.get('Cookie');
     const sessionId = getSessionIdFromCookie(cookie);
 
@@ -76,7 +77,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 };
 
 export const DELETE: APIRoute = async ({ params, request, locals }) => {
-    const runtime = locals.runtime;
+    const runtime = { env: cfEnv as any };
     const cookie = request.headers.get('Cookie');
     const sessionId = getSessionIdFromCookie(cookie);
 

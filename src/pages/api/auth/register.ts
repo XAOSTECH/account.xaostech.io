@@ -1,4 +1,5 @@
 import type { APIRoute } from 'astro';
+import { env as cfEnv } from 'cloudflare:workers';
 import { createSessionCookie, createSession } from '../../../lib/session';
 
 async function parseBody(request: Request): Promise<{ username: string; email: string; password: string; isForm: boolean }> {
@@ -12,7 +13,7 @@ async function parseBody(request: Request): Promise<{ username: string; email: s
 }
 
 export const POST: APIRoute = async ({ request, locals }) => {
-    const runtime = locals.runtime;
+    const runtime = { env: cfEnv as any };
     const { username, email, password, isForm } = await parseBody(request);
 
     const fail = (msg: string, status: number) => {
