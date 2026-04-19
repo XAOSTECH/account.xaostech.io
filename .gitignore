@@ -5,3 +5,10 @@ dist/
 .DS_Store
 *.log
 package-lock.json
+.astro/
+.wrangler/
+# shared/ is synced from monorepo at build time (CF Pages does sparse clone)
+shared/
+# Moved in by shared/injectEnv.sh during Astro build
+src/pages/api/[...path].ts
+src/pages/favicon.ico.ts
