@@ -4,15 +4,17 @@ send_metrics = false
 compatibility_flags = ["nodejs_compat"]
 
 [assets]
-directory = "./dist"
+directory = "./dist/client"
+binding = "ASSETS"
 
 [env.production]
 name = "xaostech-account"
-main = "./dist/_worker.js/index.js"
+main = "./dist/server/entry.mjs"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
 
 [env.production.assets]
-directory = "./dist"
+directory = "./dist/client"
+binding = "ASSETS"
 
 # Runtime secrets for OAuth (set via wrangler secret put --env production)
 # GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
