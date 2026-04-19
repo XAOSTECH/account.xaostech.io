@@ -1,5 +1,4 @@
 name = "xaostech-account"
-main = "./dist/_worker.js/index.js"
 compatibility_date = "2025-12-31"
 send_metrics = false
 compatibility_flags = ["nodejs_compat"]
