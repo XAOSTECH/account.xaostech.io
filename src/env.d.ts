@@ -12,6 +12,7 @@ interface Env {
     SESSION_TTL: string;
     GITHUB_CLIENT_ID?: string;
     GITHUB_CLIENT_SECRET?: string;
+    COOKIE_DOMAIN?: string;
 }
 
 declare namespace App {
