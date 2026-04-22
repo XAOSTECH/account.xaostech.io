@@ -29,12 +29,12 @@ SESSION_TTL = "604800"
 
 [[env.production.kv_namespaces]]
 binding = "SESSIONS_KV"
-id = ""
+id = "${KV_SESSIONS_ID}"
 
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "account-db"
-database_id = ""
+database_id = "${D1_ACCOUNT_DB_ID}"
 
 [env.testing]
 routes = [{ pattern = "account.testing.local/*", zone_name = "localhost" }]
