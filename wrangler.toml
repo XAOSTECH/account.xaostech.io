@@ -9,7 +9,7 @@ binding = "ASSETS"
 
 [env.production]
 name = "xaostech-account"
-main = "./dist/server/entry.mjs"
+main = "@astrojs/cloudflare/entrypoints/server"
 routes = [{ pattern = "account.xaostech.io/*", zone_name = "xaostech.io" }]
 
 [env.production.assets]
