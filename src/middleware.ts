@@ -1,7 +1,7 @@
 import { defineMiddleware, sequence } from 'astro:middleware';
 import { env as cfEnv } from 'cloudflare:workers';
 import { getSession, getSessionIdFromCookie, type SessionUser } from './server/session';
-import { getSecurityHeaders } from '../shared/types/security';
+import { applySecurityHeaders } from '../shared/types/security';
 
 const sessionMiddleware = defineMiddleware(async (context, next) => {
     const runtime = { env: cfEnv as unknown as Env };
@@ -18,12 +18,7 @@ const sessionMiddleware = defineMiddleware(async (context, next) => {
 });
 
 const securityMiddleware = defineMiddleware(async (_context, next) => {
-    const res = await next();
-    const sec = getSecurityHeaders();
-    for (const k of Object.keys(sec)) {
-        res.headers.set(k, sec[k]);
-    }
-    return res;
+    return applySecurityHeaders(await next());
 });
 
 export const onRequest = sequence(sessionMiddleware, securityMiddleware);

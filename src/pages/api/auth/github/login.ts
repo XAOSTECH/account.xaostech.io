@@ -11,5 +11,11 @@ import type { APIRoute } from 'astro';
 export const GET: APIRoute = ({ url }) => {
     const target = new URL('https://api.xaostech.io/auth/github/login');
     for (const [k, v] of url.searchParams) target.searchParams.set(k, v);
-    return Response.redirect(target.toString(), 302);
+    // Use `new Response` (NOT `Response.redirect`): the latter returns an
+    // immutable response, which crashes the security-headers middleware
+    // when it tries to set CSP/etc on the way out.
+    return new Response(null, {
+        status: 302,
+        headers: { Location: target.toString() },
+    });
 };
