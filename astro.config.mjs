@@ -11,7 +11,13 @@ export default defineConfig({
         // Astro 6 default is 'workerd' which spins up miniflare during build to
         // prerender pages. Our prerendered routes don't need workerd APIs, and
         // miniflare trips on production binding placeholders. Use Node.
-        prerenderEnvironment: 'node'
+        prerenderEnvironment: 'node',
+        // Astro 6 changed the default imageService from 'compile' to
+        // 'cloudflare-binding' which auto-provisions an IMAGES binding with a
+        // 'remote' flag. miniflare crashes parsing that flag during build
+        // ('' == true in constructExplorerBindingMap). We don't transform
+        // images here, so revert to 'compile'.
+        imageService: 'compile'
     }),
     integrations: [],
     // CSP is emitted from src/middleware.ts (single source of truth).
