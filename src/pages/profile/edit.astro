@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { env as cfEnv } from 'cloudflare:workers';
 import RoleBadge from '../../components/RoleBadge.astro';
+import { apiTry } from '../../../../shared/types/api-client';
 
 const user = Astro.locals.user;
 
@@ -9,9 +9,6 @@ if (!user) {
   return Astro.redirect('/');
 }
 
-const runtime = { env: cfEnv as any };
-
-// Fetch user's privacy settings
 let privacySettings = {
   show_friends: true,
   show_posts: true,
@@ -20,18 +17,15 @@ let privacySettings = {
   show_stats: true,
   profile_visibility: 'public',
   allow_friend_requests: true,
-  show_online_status: true
+  show_online_status: true,
 };
 
-try {
-  const settings = await runtime.env.DB.prepare(
-    'SELECT * FROM privacy_settings WHERE user_id = ?'
-  ).bind(user.user_id).first();
-  if (settings) {
-    privacySettings = { ...privacySettings, ...settings };
-  }
-} catch (err) {
-  console.error('Failed to fetch privacy settings:', err);
+const settingsRes = await apiTry<{ settings: Record<string, any> | null }>(
+  '/account/profile/settings',
+  { request: Astro.request },
+);
+if (settingsRes.ok && settingsRes.data?.settings) {
+  privacySettings = { ...privacySettings, ...settingsRes.data.settings };
 }
 
 const activeTab = Astro.url.searchParams.get('tab') || 'about';

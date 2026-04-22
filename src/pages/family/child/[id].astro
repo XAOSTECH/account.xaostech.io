@@ -1,6 +1,6 @@
 ---
 import Base from '../../../layouts/Base.astro';
-import { env as cfEnv } from 'cloudflare:workers';
+import { apiTry } from '../../../../../shared/types/api-client';
 
 const user = Astro.locals.user;
 
@@ -9,19 +9,12 @@ if (!user) {
 }
 
 const childId = Astro.params.id;
-const runtime = { env: cfEnv as any };
 
-// Verify parent owns this child
-const child = await runtime.env.DB.prepare(`
-  SELECT ca.*, u.username as child_username, u.avatar_url as child_avatar,
-         pc.content_filter_level, pc.daily_time_limit, pc.weekly_time_limit,
-         pc.can_post_content, pc.can_comment, pc.require_approval_for_posts,
-         pc.log_exercises, pc.log_logins
-  FROM child_accounts ca
-  JOIN users u ON ca.child_id = u.id
-  LEFT JOIN parental_controls pc ON ca.child_id = pc.child_id
-  WHERE ca.parent_id = ? AND ca.child_id = ?
-`).bind(user.user_id, childId).first();
+const childRes = await apiTry<{ child: any }>(
+  `/account/family/children/${encodeURIComponent(childId!)}`,
+  { request: Astro.request },
+);
+const child: any = childRes.data?.child;
 
 if (!child) {
   return Astro.redirect('/family?error=not_found');

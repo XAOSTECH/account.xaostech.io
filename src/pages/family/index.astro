@@ -1,6 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { env as cfEnv } from 'cloudflare:workers';
+import { apiTry } from '../../../../shared/types/api-client';
 
 const user = Astro.locals.user;
 
@@ -8,41 +8,13 @@ if (!user) {
   return Astro.redirect('/login');
 }
 
-const runtime = { env: cfEnv as any };
+const [childrenRes, approvalsRes] = await Promise.all([
+  apiTry<{ children: any[] }>('/account/family/children', { request: Astro.request }),
+  apiTry<{ approvals: any[] }>('/account/family/approvals?limit=20', { request: Astro.request }),
+]);
 
-// Get children linked to this parent
-let children: any[] = [];
-let pendingApprovals: any[] = [];
-
-try {
-  const result = await runtime.env.DB.prepare(`
-    SELECT ca.*, u.email as child_email, u.avatar_url as child_avatar,
-           pc.content_filter_level, pc.daily_time_limit, pc.weekly_time_limit,
-           pc.can_post_content, pc.can_comment, pc.require_approval_for_posts
-    FROM child_accounts ca
-    JOIN users u ON ca.child_id = u.id
-    LEFT JOIN parental_controls pc ON ca.child_id = pc.child_id
-    WHERE ca.parent_id = ?
-    ORDER BY ca.created_at DESC
-  `).bind(user.user_id).all();
-  children = result.results || [];
-} catch (err) {
-  console.error('Failed to fetch children:', err);
-}
-
-try {
-  const result = await runtime.env.DB.prepare(`
-    SELECT pa.*, ca.child_name
-    FROM parent_approvals pa
-    JOIN child_accounts ca ON pa.child_id = ca.child_id
-    WHERE pa.parent_id = ? AND pa.status = 'pending'
-    ORDER BY pa.created_at DESC
-    LIMIT 20
-  `).bind(user.user_id).all();
-  pendingApprovals = result.results || [];
-} catch (err) {
-  console.error('Failed to fetch approvals:', err);
-}
+const children: any[] = childrenRes.data?.children ?? [];
+const pendingApprovals: any[] = approvalsRes.data?.approvals ?? [];
 
 function getFilterBadgeClass(level: string): string {
   switch (level) {

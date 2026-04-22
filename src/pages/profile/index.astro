@@ -1,7 +1,7 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { env as cfEnv } from 'cloudflare:workers';
 import RoleBadge from '../../components/RoleBadge.astro';
+import { apiTry } from '../../../../shared/types/api-client';
 
 const user = Astro.locals.user;
 
@@ -9,64 +9,22 @@ if (!user) {
   return Astro.redirect('/login');
 }
 
-const runtime = { env: cfEnv as any };
+const [postsRes, friendsRes] = await Promise.all([
+  apiTry<{ posts: any[] }>('/account/profile/posts?limit=10', { request: Astro.request }),
+  apiTry<{ friends: any[] }>('/account/profile/friends?limit=10', { request: Astro.request }),
+]);
 
-// Fetch user's public blog posts
-let posts: any[] = [];
-let friends: any[] = [];
+const posts: any[] = postsRes.data?.posts ?? [];
+const friends: any[] = friendsRes.data?.friends ?? [];
+
 let friendPosts: any[] = [];
-
-try {
-  // User's own posts
-  const postsResult = await runtime.env.DB.prepare(`
-    SELECT p.*, u.username, u.avatar_url
-    FROM posts p
-    JOIN users u ON p.author_id = u.id
-    WHERE p.author_id = ? AND p.status = 'published'
-    ORDER BY p.created_at DESC
-    LIMIT 10
-  `).bind(user.user_id).all();
-  posts = postsResult.results || [];
-} catch (err) {
-  console.error('Failed to fetch posts:', err);
-}
-
-try {
-  // Friends list
-  const friendsResult = await runtime.env.DB.prepare(`
-    SELECT u.id, u.username, u.avatar_url, u.role,
-           f.status, f.created_at as friend_since
-    FROM friendships f
-    JOIN users u ON (
-      CASE WHEN f.user_id = ? THEN f.friend_id ELSE f.user_id END
-    ) = u.id
-    WHERE (f.user_id = ? OR f.friend_id = ?) AND f.status = 'accepted'
-    ORDER BY f.created_at DESC
-    LIMIT 10
-  `).bind(user.user_id, user.user_id, user.user_id).all();
-  friends = friendsResult.results || [];
-} catch (err) {
-  console.error('Failed to fetch friends:', err);
-}
-
-try {
-  // Friends' recent posts (timeline)
-  if (friends.length > 0) {
-    const friendIds = friends.map(f => f.id).join(',');
-    const friendPostsResult = await runtime.env.DB.prepare(`
-      SELECT p.*, u.username, u.avatar_url
-      FROM posts p
-      JOIN users u ON p.author_id = u.id
-      WHERE p.author_id IN (${friendIds}) 
-        AND p.status = 'published'
-        AND p.visibility IN ('public', 'friends')
-      ORDER BY p.created_at DESC
-      LIMIT 20
-    `).all();
-    friendPosts = friendPostsResult.results || [];
-  }
-} catch (err) {
-  console.error('Failed to fetch friend posts:', err);
+if (friends.length > 0) {
+  const ids = friends.map(f => f.id).join(',');
+  const feedRes = await apiTry<{ posts: any[] }>(
+    `/account/profile/feed?user_ids=${encodeURIComponent(ids)}&limit=20`,
+    { request: Astro.request },
+  );
+  friendPosts = feedRes.data?.posts ?? [];
 }
 
 // Combine and sort all posts for timeline
