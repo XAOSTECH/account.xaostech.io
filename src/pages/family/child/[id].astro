@@ -145,11 +145,22 @@ const success = url.searchParams.get('success');
   <div class="card danger-zone">
     <h3>⚠️ Danger Zone</h3>
     <p>Remove this child from your family account. The child account will be converted to a regular account.</p>
-    <form method="POST" action={`/api/family/remove-child/${childId}`} onsubmit="return confirm('Are you sure you want to remove this child from your family?')">
+    <form id="remove-child-form" method="POST" action={`/api/family/remove-child/${childId}`}>
       <button type="submit" class="btn danger">Remove from Family</button>
     </form>
   </div>
 </Base>
+
+<script>
+  // CSP-compliant replacement for `onsubmit="return confirm(...)"`.
+  // Inline `on*=""` attributes cannot be hashed by the Astro CSP integration,
+  // so we attach the listener at runtime instead.
+  document.getElementById('remove-child-form')?.addEventListener('submit', (e) => {
+    if (!confirm('Are you sure you want to remove this child from your family?')) {
+      e.preventDefault();
+    }
+  });
+</script>
 
 <style>
   .back {

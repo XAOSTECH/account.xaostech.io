@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env as cfEnv } from 'cloudflare:workers';
-import { getSessionIdFromCookie, getSession, generateApiKey } from '../../../lib/session';
+import { getSessionIdFromCookie, getSession, generateApiKey } from '../../../server/session';
 
 export const GET: APIRoute = async ({ request, locals }) => {
     const runtime = { env: cfEnv as any };

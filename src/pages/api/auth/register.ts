@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { env as cfEnv } from 'cloudflare:workers';
-import { createSessionCookie, createSession } from '../../../lib/session';
+import { createSessionCookie, createSession } from '../../../server/session';
 
 async function parseBody(request: Request): Promise<{ username: string; email: string; password: string; isForm: boolean }> {
     const ct = request.headers.get('Content-Type') || '';

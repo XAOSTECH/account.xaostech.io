@@ -1,6 +1,6 @@
 import { defineMiddleware, sequence } from 'astro:middleware';
 import { env as cfEnv } from 'cloudflare:workers';
-import { getSession, getSessionIdFromCookie, type SessionUser } from './lib/session';
+import { getSession, getSessionIdFromCookie, type SessionUser } from './server/session';
 import { getSecurityHeaders } from '../shared/types/security';
 
 const sessionMiddleware = defineMiddleware(async (context, next) => {
@@ -19,7 +19,9 @@ const sessionMiddleware = defineMiddleware(async (context, next) => {
 
 const securityMiddleware = defineMiddleware(async (_context, next) => {
     const res = await next();
-    const sec = getSecurityHeaders();
+    // skipCsp: Astro emits its own Content-Security-Policy with hashed
+    // inline scripts via the `security.csp` integration in astro.config.mjs.
+    const sec = getSecurityHeaders({ skipCsp: true });
     for (const k of Object.keys(sec)) {
         res.headers.set(k, sec[k]);
     }

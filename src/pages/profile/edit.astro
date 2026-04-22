@@ -73,7 +73,7 @@ const activeTab = Astro.url.searchParams.get('tab') || 'about';
         />
         <div class="avatar-actions">
           <input type="file" id="avatar-upload" accept="image/*" style="display:none;">
-          <button class="btn secondary small" onclick="document.getElementById('avatar-upload').click()">
+          <button type="button" id="avatar-upload-trigger" class="btn secondary small">
             📷 Upload New
           </button>
           {user.github_avatar_url && (
@@ -556,6 +556,9 @@ const activeTab = Astro.url.searchParams.get('tab') || 'about';
   });
 
   // Avatar upload
+  document.getElementById('avatar-upload-trigger')?.addEventListener('click', () => {
+    document.getElementById('avatar-upload')?.click();
+  });
   document.getElementById('avatar-upload')?.addEventListener('change', async (e) => {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
