@@ -10,7 +10,11 @@ export default defineConfig({
         // Match the wrangler.toml KV binding name so the adapter's built-in
         // Astro Sessions feature merges into our explicit kv_namespaces entry
         // instead of creating a separate "SESSION" binding that hijacks the deploy.
-        sessionKVBindingName: 'SESSIONS_KV'
+        sessionKVBindingName: 'SESSIONS_KV',
+        // Astro 6 default is 'workerd' which spins up miniflare during build to
+        // prerender pages. Our prerendered routes don't need workerd APIs, and
+        // miniflare trips on production binding placeholders. Use Node.
+        prerenderEnvironment: 'node'
     }),
     integrations: [],
     // CSP is emitted from src/middleware.ts (single source of truth).
