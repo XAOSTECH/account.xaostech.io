@@ -6,7 +6,11 @@ export default defineConfig({
     adapter: cloudflare({
         platformProxy: {
             enabled: true
-        }
+        },
+        // Match the wrangler.toml KV binding name so the adapter's built-in
+        // Astro Sessions feature merges into our explicit kv_namespaces entry
+        // instead of creating a separate "SESSION" binding that hijacks the deploy.
+        sessionKVBindingName: 'SESSIONS_KV'
     }),
     integrations: [],
     // CSP is emitted from src/middleware.ts (single source of truth).
