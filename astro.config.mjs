@@ -4,9 +4,6 @@ import cloudflare from '@astrojs/cloudflare';
 export default defineConfig({
     output: 'server',
     adapter: cloudflare({
-        platformProxy: {
-            enabled: true
-        },
         // Match the wrangler.toml KV binding name so the adapter's built-in
         // Astro Sessions feature merges into our explicit kv_namespaces entry
         // instead of creating a separate "SESSION" binding that hijacks the deploy.
