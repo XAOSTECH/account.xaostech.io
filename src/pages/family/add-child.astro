@@ -1,5 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
+import { apiTry } from '../../../shared/types/api-client';
 
 const user = Astro.locals.user;
 
@@ -7,8 +8,43 @@ if (!user) {
   return Astro.redirect('/login');
 }
 
-const url = new URL(Astro.request.url);
-const error = url.searchParams.get('error');
+let error: string | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const payload: Record<string, any> = {
+    child_name: (form.get('child_name') || '').toString().trim(),
+    username: (form.get('child_username') || '').toString().trim(),
+    password: (form.get('child_password') || '').toString(),
+    email: (form.get('child_email') || '').toString().trim() || null,
+    birth_year: (form.get('birth_year') || '').toString() || null,
+    content_filter_level: (form.get('filter_level') || 'strict').toString(),
+    daily_limit: (form.get('daily_limit') || '60').toString(),
+    weekly_limit: (form.get('weekly_limit') || '420').toString(),
+    can_post_content: form.get('can_post_content') === 'on',
+    can_comment: form.get('can_comment') === 'on',
+    require_approval_for_posts: form.get('require_approval_for_posts') === 'on',
+  };
+
+  if (!payload.child_name || !payload.username || !payload.password) {
+    error = 'missing_fields';
+  } else if (payload.username.length < 3 || !/^[a-zA-Z0-9_-]+$/.test(payload.username)) {
+    error = 'invalid_username';
+  } else if (payload.password.length < 6) {
+    error = 'weak_password';
+  } else {
+    const result = await apiTry<{ success: boolean; child_id: string }>('/account/family/add-child', {
+      request: Astro.request,
+      method: 'POST',
+      body: payload,
+    });
+    if (result.ok) {
+      return Astro.redirect('/family?created=1');
+    }
+    if (result.status === 409) error = 'username_taken';
+    else error = 'creation_failed';
+  }
+}
 
 // Generate year options for birth year select
 const currentYear = new Date().getFullYear();
@@ -23,6 +59,8 @@ const yearOptions = Array.from({ length: 18 }, (_, i) => currentYear - 4 - i);
   {error && (
     <div class="alert alert-error">
       {error === 'missing_fields' && 'Please fill in all required fields'}
+      {error === 'invalid_username' && 'Username must be 3+ chars; letters, numbers, _ or - only'}
+      {error === 'weak_password' && 'Password must be at least 6 characters'}
       {error === 'username_taken' && 'This username is already taken'}
       {error === 'creation_failed' && 'Failed to create account. Please try again.'}
     </div>
@@ -33,7 +71,7 @@ const yearOptions = Array.from({ length: 18 }, (_, i) => currentYear - 4 - i);
       🔒 Child accounts have restricted access and activity monitoring. You'll be able to approve their actions and set time limits.
     </div>
     
-    <form method="POST" action="/api/family/add-child">
+    <form method="POST">
       <div class="form-group">
         <label for="child_name">Child's Name</label>
         <input type="text" id="child_name" name="child_name" required placeholder="How should we call them?" />
