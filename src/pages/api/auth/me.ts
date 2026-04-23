@@ -7,29 +7,23 @@ import type { APIRoute } from 'astro';
 export const GET: APIRoute = async ({ locals, request }) => {
     const user = locals.user;
 
-    // Handle CORS for cross-subdomain requests
+    // Handle CORS for cross-subdomain requests.
+    // Allow any *.xaostech.io subdomain (and the apex) plus localhost dev,
+    // so adding a new subdomain (music, portfolio, ai, security, ...) never
+    // regresses the floating bubble's logged-in state.
     const origin = request.headers.get('origin');
-    const allowedOrigins = [
-        'https://xaostech.io',
-        'https://blog.xaostech.io',
-        'https://edu.xaostech.io',
-        'https://lingua.xaostech.io',
-        'https://chat.xaostech.io',
-        'https://data.xaostech.io',
-        'https://api.xaostech.io',
-        'https://payments.xaostech.io',
-        'http://localhost:4321', // Dev
-    ];
-
-    const corsOrigin = origin && allowedOrigins.includes(origin)
+    const ORIGIN_RE = /^https:\/\/([a-z0-9-]+\.)*xaostech\.io$/;
+    const isLocalDev = origin === 'http://localhost:4321' || origin === 'http://localhost:8788';
+    const corsOrigin = origin && (ORIGIN_RE.test(origin) || isLocalDev)
         ? origin
-        : allowedOrigins[0];
+        : 'https://xaostech.io';
 
     const headers = {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': corsOrigin,
         'Access-Control-Allow-Credentials': 'true',
         'Cache-Control': 'private, no-cache',
+        'Vary': 'Origin',
     };
 
     if (!user) {
@@ -55,16 +49,20 @@ export const GET: APIRoute = async ({ locals, request }) => {
 
 // Handle preflight requests
 export const OPTIONS: APIRoute = async ({ request }) => {
-    const origin = request.headers.get('origin') || 'https://xaostech.io';
+    const origin = request.headers.get('origin') || '';
+    const ORIGIN_RE = /^https:\/\/([a-z0-9-]+\.)*xaostech\.io$/;
+    const isLocalDev = origin === 'http://localhost:4321' || origin === 'http://localhost:8788';
+    const allowOrigin = (ORIGIN_RE.test(origin) || isLocalDev) ? origin : 'https://xaostech.io';
 
     return new Response(null, {
         status: 204,
         headers: {
-            'Access-Control-Allow-Origin': origin,
+            'Access-Control-Allow-Origin': allowOrigin,
             'Access-Control-Allow-Methods': 'GET, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type',
             'Access-Control-Allow-Credentials': 'true',
             'Access-Control-Max-Age': '86400',
+            'Vary': 'Origin',
         },
     });
 };
